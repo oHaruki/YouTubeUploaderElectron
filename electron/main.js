@@ -1,8 +1,8 @@
 const { app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell, nativeImage } = require('electron');
 const path = require('path');
-const fs = require('fs'); // Add fs module
+const fs = require('fs');
 const { spawn, spawnSync } = require('child_process');
-const http = require('http'); // Use http instead of fetch
+const http = require('http');
 const portfinder = require('portfinder');
 const isDev = process.env.NODE_ENV === 'development';
 const Store = require('electron-store');
@@ -30,9 +30,17 @@ let serverRunning = false;
 let quitting = false;
 let startupMinimize = store.get('startMinimized');
 
+// Extract port from Flask output
+const extractPortFromOutput = (output) => {
+  const match = output.match(/Running on http:\/\/127\.0\.0\.1:(\d+)/);
+  if (match && match[1]) {
+    return parseInt(match[1]);
+  }
+  return null;
+};
+
 // Check if Python is installed and get the correct executable path
 const checkPythonPath = () => {
-  // First, try to detect common Python locations
   const pythonCommands = [
     process.platform === 'win32' ? 'python' : 'python3',
     process.platform === 'win32' ? 'py' : 'python',
@@ -42,7 +50,6 @@ const checkPythonPath = () => {
 
   for (const cmd of pythonCommands) {
     try {
-      // Using spawnSync to check if the command exists
       const result = spawnSync(cmd, ['--version'], {
         stdio: 'pipe',
         encoding: 'utf8'
@@ -54,26 +61,29 @@ const checkPythonPath = () => {
       }
     } catch (error) {
       log.info(`Command ${cmd} not found or failed: ${error.message}`);
-      // Continue to try the next command
     }
   }
   
-  // If we get here, we couldn't find Python
   return null;
 };
 
 // Try to connect to a server on the given port
 const tryConnect = async (port) => {
   return new Promise(resolve => {
-    const req = http.get(`http://localhost:${port}/`, {timeout: 1000}, (res) => {
+    log.info(`Attempting to connect to http://127.0.0.1:${port}/`);
+    const req = http.get(`http://127.0.0.1:${port}/`, {timeout: 1000}, (res) => {
+      req.destroy();
+      log.info(`Connection to port ${port} successful (status: ${res.statusCode})`);
       resolve(res.statusCode < 400);
     });
     
-    req.on('error', () => {
+    req.on('error', (err) => {
+      log.info(`Connection to port ${port} failed: ${err.message}`);
       resolve(false);
     });
     
     req.on('timeout', () => {
+      log.info(`Connection to port ${port} timed out`);
       req.destroy();
       resolve(false);
     });
@@ -103,7 +113,7 @@ const startFlaskServer = async () => {
     }
 
     // Ensure the Flask app script exists
-    const scriptPath = path.join(app.getAppPath(), 'flask_app', 'app.py');
+    const scriptPath = path.join(app.isPackaged ? process.resourcesPath : app.getAppPath(), 'flask_app', 'app.py');
     if (!fs.existsSync(scriptPath)) {
       const errorMessage = `Flask app script not found at ${scriptPath}`;
       log.error(errorMessage);
@@ -113,40 +123,56 @@ const startFlaskServer = async () => {
     log.info(`Using script path: ${scriptPath}`);
     
     // Environment variables for Flask
-    const env = { ...process.env, PORT: flaskPort.toString() };
+    const env = { ...process.env, PORT: flaskPort.toString(), ELECTRON_APP: 'true' };
     
     // Start Flask as a child process
     flaskProcess = spawn(pythonCommand, [scriptPath], { 
       env,
-      shell: true, // Use shell on Windows to find python properly
-      stdio: 'pipe' // Capture stdio for logging
+      shell: true,
+      stdio: 'pipe'
     });
     
     flaskProcess.stdout.on('data', (data) => {
-      log.info(`Flask stdout: ${data}`);
+      const output = data.toString();
+      log.info(`Flask stdout: ${output}`);
       
-      // Check if the output contains the actual port Flask is using
-      const match = data.toString().match(/Running on http:\/\/127\.0\.0\.1:(\d+)/);
-      if (match && match[1]) {
-        const actualPort = parseInt(match[1]);
-        if (actualPort !== flaskPort) {
-          log.info(`Flask is actually using port ${actualPort} instead of ${flaskPort}`);
-          flaskPort = actualPort;
-        }
+      const port = extractPortFromOutput(output);
+      if (port) {
+        log.info(`Detected Flask running on port ${port} from stdout`);
+        flaskPort = port;
+        tryConnect(flaskPort).then(result => {
+          if (result) {
+            serverRunning = true;
+            log.info(`Successfully connected to Flask on port ${flaskPort}`);
+            if (!mainWindow) {
+              createWindow();
+            } else {
+              mainWindow.loadURL(`http://localhost:${flaskPort}`);
+            }
+          }
+        });
       }
     });
     
     flaskProcess.stderr.on('data', (data) => {
-      log.error(`Flask stderr: ${data}`);
+      const output = data.toString();
+      log.error(`Flask stderr: ${output}`);
       
-      // Also check stderr for port information
-      const match = data.toString().match(/Running on http:\/\/127\.0\.0\.1:(\d+)/);
-      if (match && match[1]) {
-        const actualPort = parseInt(match[1]);
-        if (actualPort !== flaskPort) {
-          log.info(`Flask is actually using port ${actualPort} instead of ${flaskPort}`);
-          flaskPort = actualPort;
-        }
+      const port = extractPortFromOutput(output);
+      if (port) {
+        log.info(`Detected Flask running on port ${port} from stderr`);
+        flaskPort = port;
+        tryConnect(flaskPort).then(result => {
+          if (result) {
+            serverRunning = true;
+            log.info(`Successfully connected to Flask on port ${flaskPort}`);
+            if (!mainWindow) {
+              createWindow();
+            } else {
+              mainWindow.loadURL(`http://localhost:${flaskPort}`);
+            }
+          }
+        });
       }
     });
     
@@ -160,7 +186,6 @@ const startFlaskServer = async () => {
       log.info(`Flask server process exited with code ${code}`);
       serverRunning = false;
       
-      // Restart server if it crashes and app is not quitting
       if (!quitting && code !== 0) {
         log.info('Flask server crashed, restarting...');
         setTimeout(startFlaskServer, 1000);
@@ -168,19 +193,23 @@ const startFlaskServer = async () => {
     });
 
     // Check if Flask server starts successfully
-    const maxWaitTime = 30000; // 30 seconds (increased from 10)
+    const maxWaitTime = 30000;
     const startTime = Date.now();
     
-    // Try to connect to the server
+    // Try to connect to the server with multiple attempts
+    let attempts = 0;
+    const portsToTry = [flaskPort, 5000, 5001, 5002, 5003, 5004, 5005];
+    
     while (Date.now() - startTime < maxWaitTime) {
+      attempts++;
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Try both the expected port and the default Flask port (5000)
+      // Try the expected port first
+      log.info(`Connection attempt ${attempts} to Flask on port ${flaskPort}...`);
       if (await tryConnect(flaskPort)) {
         serverRunning = true;
-        log.info(`Flask server is running on port ${flaskPort}`);
+        log.info(`✓ Successfully connected to Flask on port ${flaskPort}`);
         
-        // Create or reload the window once server is running
         if (!mainWindow) {
           createWindow();
         } else {
@@ -189,24 +218,27 @@ const startFlaskServer = async () => {
         return true;
       }
       
-      // If Flask ignored our PORT and used the default port (5000)
-      if (flaskPort !== 5000 && await tryConnect(5000)) {
-        flaskPort = 5000;
-        serverRunning = true;
-        log.info('Flask server is running on default port 5000');
-        
-        // Create or reload the window once server is running
-        if (!mainWindow) {
-          createWindow();
-        } else {
-          mainWindow.loadURL(`http://localhost:${flaskPort}`);
+      // Try other possible ports
+      for (const altPort of portsToTry) {
+        if (altPort !== flaskPort) {
+          log.info(`Trying alternative port ${altPort}...`);
+          if (await tryConnect(altPort)) {
+            flaskPort = altPort;
+            serverRunning = true;
+            log.info(`✓ Found Flask server on alternative port ${altPort}`);
+            
+            if (!mainWindow) {
+              createWindow();
+            } else {
+              mainWindow.loadURL(`http://localhost:${flaskPort}`);
+            }
+            return true;
+          }
         }
-        return true;
       }
     }
     
-    // If we get here, the server didn't start in time
-    const errorMessage = 'Flask server failed to start within the expected time';
+    const errorMessage = 'Flask server might be running but not responding. Check for errors in the server logs.';
     log.error(errorMessage);
     dialog.showErrorBox('Server Error', errorMessage);
     return false;
@@ -223,10 +255,8 @@ const stopFlaskServer = () => {
     log.info('Stopping Flask server...');
     
     if (process.platform === 'win32') {
-      // On Windows we need to use taskkill to kill the process tree
       spawn('taskkill', ['/pid', flaskProcess.pid, '/f', '/t']);
     } else {
-      // On Unix we can kill the process group
       flaskProcess.kill('SIGTERM');
     }
     
@@ -279,11 +309,21 @@ const createWindow = () => {
 
 // Create the system tray icon and menu
 const createTray = () => {
-  // Create a default empty icon
-  const emptyIcon = nativeImage.createEmpty();
+  const iconPath = path.join(__dirname, 'icons', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+  let trayIcon;
   
-  // Try to use the app icon if available, otherwise use empty icon
-  tray = new Tray(emptyIcon);
+  try {
+    if (fs.existsSync(iconPath)) {
+      trayIcon = nativeImage.createFromPath(iconPath);
+    } else {
+      trayIcon = nativeImage.createEmpty();
+    }
+  } catch (error) {
+    log.error('Error loading tray icon:', error);
+    trayIcon = nativeImage.createEmpty();
+  }
+  
+  tray = new Tray(trayIcon);
   
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -331,6 +371,7 @@ const createTray = () => {
     }
   });
 };
+
 // Add IPC handlers for preload.js
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
@@ -353,6 +394,7 @@ ipcMain.handle('restart-app', () => {
   app.relaunch();
   app.exit(0);
 });
+
 // Application initialization
 app.whenReady().then(async () => {
   try {
