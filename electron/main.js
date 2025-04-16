@@ -1,6 +1,8 @@
 const { app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell, nativeImage } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const fs = require('fs'); // Add fs module
+const { spawn, spawnSync } = require('child_process');
+const http = require('http'); // Use http instead of fetch
 const portfinder = require('portfinder');
 const isDev = process.env.NODE_ENV === 'development';
 const Store = require('electron-store');
@@ -41,17 +43,17 @@ const checkPythonPath = () => {
   for (const cmd of pythonCommands) {
     try {
       // Using spawnSync to check if the command exists
-      const { spawn } = require('child_process');
-      const child = spawn(cmd, ['--version'], {
-        shell: true,
-        stdio: ['ignore', 'pipe', 'ignore']
+      const result = spawnSync(cmd, ['--version'], {
+        stdio: 'pipe',
+        encoding: 'utf8'
       });
       
-      // If we got here without an error, the command exists
-      log.info(`Found Python command: ${cmd}`);
-      return cmd;
+      if (result.status === 0) {
+        log.info(`Found Python command: ${cmd} (${result.stdout.trim()})`);
+        return cmd;
+      }
     } catch (error) {
-      log.info(`Command ${cmd} not found or failed`);
+      log.info(`Command ${cmd} not found or failed: ${error.message}`);
       // Continue to try the next command
     }
   }
@@ -62,17 +64,28 @@ const checkPythonPath = () => {
 
 // Try to connect to a server on the given port
 const tryConnect = async (port) => {
-  try {
-    const response = await fetch(`http://localhost:${port}/`);
-    return response.ok;
-  } catch (error) {
-    return false;
-  }
+  return new Promise(resolve => {
+    const req = http.get(`http://localhost:${port}/`, {timeout: 1000}, (res) => {
+      resolve(res.statusCode < 400);
+    });
+    
+    req.on('error', () => {
+      resolve(false);
+    });
+    
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
 };
 
 // Start Flask server
 const startFlaskServer = async () => {
-  if (serverRunning) return true;
+  if (serverRunning) {
+    log.info('Flask server is already running');
+    return true;
+  }
 
   try {
     // Find an available port
@@ -83,14 +96,20 @@ const startFlaskServer = async () => {
     // Check for Python executable
     const pythonCommand = checkPythonPath();
     if (!pythonCommand) {
-      dialog.showErrorBox(
-        'Python Not Found',
-        'Python is required but was not found on your system. Please install Python and try again.'
-      );
+      const errorMessage = 'Python is required but was not found on your system. Please install Python and try again.';
+      log.error(errorMessage);
+      dialog.showErrorBox('Python Not Found', errorMessage);
       return false;
     }
 
+    // Ensure the Flask app script exists
     const scriptPath = path.join(app.getAppPath(), 'flask_app', 'app.py');
+    if (!fs.existsSync(scriptPath)) {
+      const errorMessage = `Flask app script not found at ${scriptPath}`;
+      log.error(errorMessage);
+      dialog.showErrorBox('Flask App Not Found', errorMessage);
+      return false;
+    }
     log.info(`Using script path: ${scriptPath}`);
     
     // Environment variables for Flask
@@ -133,10 +152,7 @@ const startFlaskServer = async () => {
     
     flaskProcess.on('error', (err) => {
       log.error(`Failed to start Flask process: ${err}`);
-      dialog.showErrorBox(
-        'Flask Error',
-        `Failed to start Flask: ${err.message}`
-      );
+      dialog.showErrorBox('Flask Error', `Failed to start Flask: ${err.message}`);
       return false;
     });
     
@@ -190,17 +206,13 @@ const startFlaskServer = async () => {
     }
     
     // If we get here, the server didn't start in time
-    dialog.showErrorBox(
-      'Server Error',
-      'Flask server failed to start within the expected time'
-    );
+    const errorMessage = 'Flask server failed to start within the expected time';
+    log.error(errorMessage);
+    dialog.showErrorBox('Server Error', errorMessage);
     return false;
   } catch (error) {
     log.error('Failed to start Flask server:', error);
-    dialog.showErrorBox(
-      'Server Error',
-      `Failed to start the Flask server: ${error.message}`
-    );
+    dialog.showErrorBox('Server Error', `Failed to start the Flask server: ${error.message}`);
     return false;
   }
 };
@@ -319,7 +331,28 @@ const createTray = () => {
     }
   });
 };
+// Add IPC handlers for preload.js
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
+});
 
+ipcMain.handle('get-settings', () => {
+  return {
+    autoLaunch: store.get('autoLaunch'),
+    startMinimized: store.get('startMinimized')
+  };
+});
+
+ipcMain.handle('save-settings', (_, settings) => {
+  store.set('autoLaunch', settings.autoLaunch);
+  store.set('startMinimized', settings.startMinimized);
+  return { success: true };
+});
+
+ipcMain.handle('restart-app', () => {
+  app.relaunch();
+  app.exit(0);
+});
 // Application initialization
 app.whenReady().then(async () => {
   try {
