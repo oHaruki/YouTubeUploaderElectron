@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="{{ config.theme|default('light') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Auto Uploader</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#"><i class="bi bi-youtube me-2"></i>YouTube Auto Uploader</a>
+            <div class="d-flex align-items-center">
+                <button id="themeToggleBtn" class="theme-toggle">
+                    {% if config.theme == 'dark' %}
+                        <i class="bi bi-sun-fill"></i>
+                    {% else %}
+                        <i class="bi bi-moon-fill"></i>
+                    {% endif %}
+                </button>
+                <div id="statusIndicator">
+                    {% if is_authenticated %}
+                        {% if is_monitoring %}
+                            <span class="status-indicator status-active"></span>
+                            <span class="text-light">Monitoring</span>
+                        {% else %}
+                            <span class="status-indicator status-inactive"></span>
+                            <span class="text-light">Not Monitoring</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="status-indicator status-warning"></span>
+                        <span class="text-light">Not Authenticated</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="row">
+            <div class="col-md-12">
+                {% if not is_authenticated %}
+                    <div class="alert alert-warning fade-in">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-exclamation-triangle fs-3 me-3"></i>
+                            <div>
+                                <h5 class="mb-1">Authentication Required</h5>
+                                <p class="mb-0">You need to authenticate with YouTube to use this application.</p>
+                            </div>
+                            <a href="/auth" class="btn btn-primary ms-auto">Authenticate Now</a>
+                        </div>
+                    </div>
+                {% endif %}
+
+                {% if upload_limit_reached %}
+                    <div class="alert alert-danger fade-in">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-exclamation-circle fs-3 me-3"></i>
+                            <div>
+                                <h5 class="mb-1">Upload Limit Reached</h5>
+                                <p class="mb-0">YouTube upload limit reached! Please wait before uploading more videos.</p>
+                                <p class="mb-0" id="limitResetTime" data-time="{{ upload_limit_reset_time }}"></p>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+
+                <ul class="nav nav-tabs" id="mainTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="uploads-tab" data-bs-toggle="tab" data-bs-target="#uploads-tab-pane" type="button" role="tab" aria-controls="uploads-tab-pane" aria-selected="true">
+                            <i class="bi bi-cloud-upload me-1"></i> Uploads
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings-tab-pane" type="button" role="tab" aria-controls="settings-tab-pane" aria-selected="false">
+                            <i class="bi bi-gear me-1"></i> Settings
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="api-projects-tab" data-bs-toggle="tab" data-bs-target="#api-projects-tab-pane" type="button" role="tab" aria-controls="api-projects-tab-pane" aria-selected="false">
+                            <i class="bi bi-key me-1"></i> API Projects
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="about-tab" data-bs-toggle="tab" data-bs-target="#about-tab-pane" type="button" role="tab" aria-controls="about-tab-pane" aria-selected="false">
+                            <i class="bi bi-info-circle me-1"></i> About
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="mainTabsContent">
+                    <!-- Uploads Tab -->
+                    <div class="tab-pane fade show active" id="uploads-tab-pane" role="tabpanel" aria-labelledby="uploads-tab" tabindex="0">
+                        <div class="card fade-in">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-folder me-2"></i>Folder to Monitor</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info mb-3">
+                                    <i class="bi bi-info-circle me-2"></i>
+                                    Enter the full path to the folder you want to monitor for video files. Videos placed in this folder will be automatically uploaded to YouTube.
+                                </div>
+                                
+                                <div class="input-group mb-3">
+                                    <input type="text" class="form-control" id="watchFolderPath" value="{{ config.watch_folder }}" placeholder="Enter the complete folder path (e.g., C:\Users\YourName\Videos\Folder)">
+                                    <button class="btn btn-success" type="button" id="saveFolderBtn">
+                                        <i class="bi bi-save me-1"></i> Save
+                                    </button>
+                                </div>
+
+                                <!-- Folder path status notification -->
+                                <div id="folderStatus" class="mb-3 d-none">
+                                    <!-- Folder validation status will appear here -->
+                                </div>
+                                
+                                <div class="d-flex justify-content-center mt-4">
+                                    <button id="startMonitoringBtn" class="btn btn-success me-3" {% if not is_authenticated or is_monitoring %}disabled{% endif %}>
+                                        <i class="bi bi-play-fill me-1"></i> Start Monitoring
+                                    </button>
+                                    <button id="stopMonitoringBtn" class="btn btn-danger" {% if not is_authenticated or not is_monitoring %}disabled{% endif %}>
+                                        <i class="bi bi-stop-fill me-1"></i> Stop Monitoring
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card fade-in">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-list-ul me-2"></i>Upload Queue</span>
+                                <button id="clearCompletedBtn" class="btn btn-sm btn-outline-light">
+                                    <i class="bi bi-trash me-1"></i> Clear Completed
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div id="uploadQueueContainer" class="mb-3">
+                                    <div class="text-center text-muted py-4" id="emptyQueueMessage">
+                                        <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                                        No uploads in queue
+                                    </div>
+                                    <div id="uploadItems"></div>
+                                </div>
+                                <div id="queueStats" class="text-end text-muted small d-none">
+                                    <span id="statsText">Uploads: 0 completed, 0 pending, 0 uploading, 0 failed</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Settings Tab -->
+                    <div class="tab-pane fade" id="settings-tab-pane" role="tabpanel" aria-labelledby="settings-tab" tabindex="0">
+                        <div class="card fade-in">
+                            <div class="card-header">
+                                <i class="bi bi-sliders me-2"></i>Upload Settings
+                            </div>
+                            <div class="card-body">
+                                <form id="settingsForm">
+                                    <div class="settings-section">
+                                        <h5 class="mb-3">YouTube Channel Selection</h5>
+                                        <div class="alert alert-info mb-3">
+                                            <i class="bi bi-info-circle me-2"></i>
+                                            Your Google account has access to multiple YouTube channels. Select which channel to use for uploads.
+                                        </div>
+                                        
+                                        <div id="channelSelectionContainer" class="mb-3">
+                                            <div class="text-center py-3" id="channelsLoading">
+                                                <div class="spinner-border text-primary" role="status">
+                                                    <span class="visually-hidden">Loading channels...</span>
+                                                </div>
+                                                <p class="mt-2">Loading your YouTube channels...</p>
+                                            </div>
+                                            
+                                            <div id="channelsList" class="d-none">
+                                                <!-- Channels will be loaded here -->
+                                            </div>
+                                            
+                                            <div class="alert alert-danger d-none" id="channelsError">
+                                                Error loading channels. Please try refreshing the page.
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="settings-section">
+                                        <h5 class="mb-3">Video Details</h5>
+                                        <div class="mb-3">
+                                            <label for="titleTemplate" class="form-label">Title Template</label>
+                                            <input type="text" class="form-control" id="titleTemplate" value="{{ config.title_template }}" 
+                                                placeholder="Use {filename} to insert the original filename">
+                                            <div class="form-text">Use {filename} as a placeholder for the original filename.</div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="description" class="form-label">Description</label>
+                                            <textarea class="form-control" id="description" rows="3">{{ config.description }}</textarea>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="tags" class="form-label">Tags (comma separated)</label>
+                                            <input type="text" class="form-control" id="tags" value="{{ config.tags }}">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Privacy Setting</label>
+                                            <div class="d-flex">
+                                                <div class="form-check me-3">
+                                                    <input class="form-check-input" type="radio" name="privacySetting" id="privacyPublic" value="public" 
+                                                        {% if config.privacy == 'public' %}checked{% endif %}>
+                                                    <label class="form-check-label" for="privacyPublic">Public</label>
+                                                </div>
+                                                <div class="form-check me-3">
+                                                    <input class="form-check-input" type="radio" name="privacySetting" id="privacyUnlisted" value="unlisted" 
+                                                        {% if config.privacy == 'unlisted' %}checked{% endif %}>
+                                                    <label class="form-check-label" for="privacyUnlisted">Unlisted</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" name="privacySetting" id="privacyPrivate" value="private" 
+                                                        {% if config.privacy == 'private' %}checked{% endif %}>
+                                                    <label class="form-check-label" for="privacyPrivate">Private</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="settings-section">
+                                        <h5 class="mb-3">Behavior Settings</h5>
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" id="deleteAfterUpload" 
+                                                {% if config.delete_after_upload %}checked{% endif %}>
+                                            <label class="form-check-label" for="deleteAfterUpload">Delete files after successful upload</label>
+                                        </div>
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" id="checkExistingFiles" 
+                                                {% if config.check_existing_files %}checked{% endif %}>
+                                            <label class="form-check-label" for="checkExistingFiles">Process existing files when starting monitoring</label>
+                                        </div>
+                                        <div class="row mb-3">
+                                            <div class="col-md-6">
+                                                <label for="maxRetries" class="form-label">Maximum Retry Attempts</label>
+                                                <input type="number" class="form-control" id="maxRetries" min="1" max="10" value="{{ config.max_retries }}">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="uploadLimitDuration" class="form-label">Upload Limit Reset (hours)</label>
+                                                <input type="number" class="form-control" id="uploadLimitDuration" min="1" max="48" value="{{ config.upload_limit_duration }}">
+                                                <div class="form-text">Time to wait after hitting YouTube's upload limit.</div>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <label for="deleteRetryCount" class="form-label">File Deletion Retry Count</label>
+                                                <input type="number" class="form-control" id="deleteRetryCount" min="1" max="20" value="{{ config.delete_retry_count }}">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="deleteRetryDelay" class="form-label">Delete Retry Delay (seconds)</label>
+                                                <input type="number" class="form-control" id="deleteRetryDelay" min="1" max="30" value="{{ config.delete_retry_delay }}">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="d-flex justify-content-end">
+                                        <button type="button" id="saveSettingsBtn" class="btn btn-primary">
+                                            <i class="bi bi-save me-1"></i> Save Settings
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- API Projects Tab -->
+                    <div class="tab-pane fade" id="api-projects-tab-pane" role="tabpanel" aria-labelledby="api-projects-tab" tabindex="0">
+                        <div class="card fade-in">
+                            <div class="card-header">
+                                <i class="bi bi-key me-2"></i>YouTube API Projects
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info">
+                                    <div class="d-flex">
+                                        <i class="bi bi-info-circle fs-3 me-3"></i>
+                                        <div>
+                                            <h5 class="mb-1">Increase Your Upload Capacity</h5>
+                                            <p class="mb-0"><strong>Multiple API projects help overcome YouTube API limits.</strong> Each Google Cloud project gives you a separate upload quota. Upload limits are per API project, not per channel.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div id="apiProjectsContainer" class="mb-4">
+                                    <div class="text-center py-3" id="projectsLoading">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Loading projects...</span>
+                                        </div>
+                                        <p class="mt-2">Loading API projects...</p>
+                                    </div>
+                                    
+                                    <div id="projectsList" class="d-none mb-4">
+                                        <!-- Projects will be listed here -->
+                                    </div>
+                                    
+                                    <div class="alert alert-danger d-none" id="projectsError">
+                                        Error loading API projects.
+                                    </div>
+                                </div>
+                                
+                                <div class="card bg-light mb-4">
+                                    <div class="card-body">
+                                        <h5 class="card-title"><i class="bi bi-plus-circle me-2"></i>Add New API Project</h5>
+                                        <p>To add a new API project, follow these steps:</p>
+                                        <ol>
+                                            <li>Go to the <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></li>
+                                            <li>Create a new project</li>
+                                            <li>Enable the YouTube Data API v3</li>
+                                            <li>Create OAuth credentials (Web application type)</li>
+                                            <li>Add <code>http://localhost:5000/oauth2callback/project/YOUR_PROJECT_ID</code> as an authorized redirect URI</li>
+                                            <li>Download the credentials JSON file</li>
+                                            <li>Upload it below</li>
+                                        </ol>
+                                        
+                                        <form id="uploadProjectForm" class="mt-3">
+                                            <div class="input-group">
+                                                <input type="file" class="form-control" id="projectFile" accept=".json">
+                                                <button class="btn btn-primary" type="submit" id="uploadProjectBtn">
+                                                    <i class="bi bi-upload me-1"></i> Upload
+                                                </button>
+                                            </div>
+                                            <div class="form-text">Upload your client_secret.json file.</div>
+                                        </form>
+                                    </div>
+                                </div>
+                                
+                                <div class="alert alert-warning">
+                                    <div class="d-flex">
+                                        <i class="bi bi-exclamation-triangle fs-3 me-3"></i>
+                                        <div>
+                                            <h5 class="mb-1">Automatic API Rotation</h5>
+                                            <p class="mb-0">When you hit YouTube's upload limit with one API project, the app will automatically try to use another authenticated project.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- About Tab -->
+                    <div class="tab-pane fade" id="about-tab-pane" role="tabpanel" aria-labelledby="about-tab" tabindex="0">
+                        <div class="card fade-in">
+                            <div class="card-header">
+                                <i class="bi bi-info-circle me-2"></i>About
+                            </div>
+                            <div class="card-body">
+                                <div class="text-center mb-4">
+                                    <h3>YouTube Auto Uploader</h3>
+                                    <p class="lead">Automatically upload gameplay videos to YouTube</p>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="card mb-3">
+                                            <div class="card-body">
+                                                <h5><i class="bi bi-check-circle text-success me-2"></i>Features</h5>
+                                                <ul>
+                                                    <li>Automatic video uploading from a watch folder</li>
+                                                    <li>Customizable video metadata (title, description, tags)</li>
+                                                    <li>Automatic file deletion after upload</li>
+                                                    <li>Handles YouTube's upload limits gracefully</li>
+                                                    <li>Clean, modern interface with dark mode</li>
+                                                    <li>Multiple API projects support</li>
+                                                    <li>Channel selection</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h5><i class="bi bi-question-circle text-primary me-2"></i>Getting Started</h5>
+                                                <ol>
+                                                    <li>Authenticate with your YouTube account</li>
+                                                    <li>Select the folder to monitor for videos</li>
+                                                    <li>Configure upload settings</li>
+                                                    <li>Click "Start Monitoring"</li>
+                                                    <li>New videos will be automatically uploaded</li>
+                                                </ol>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="alert alert-info mt-4">
+                                    <div class="d-flex">
+                                        <i class="bi bi-lightbulb fs-3 me-3"></i>
+                                        <div>
+                                            <h5 class="mb-1">Upload Limit Tips</h5>
+                                            <p class="mb-0">If you encounter "Upload Limit Exceeded" errors, this is a YouTube API restriction. The app will automatically wait and retry uploads after the limit resets. For more upload capacity, add additional API projects in the API Projects tab.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Updates Card - New section -->
+                        <div class="card mt-4 fade-in">
+                            <div class="card-header">
+                                <i class="bi bi-cloud-arrow-down me-2"></i>Updates
+                            </div>
+                            <div class="card-body">
+                                <div id="updateStatusLoading" class="text-center py-3">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Checking for updates...</span>
+                                    </div>
+                                    <p class="mt-2">Checking for updates...</p>
+                                </div>
+                                
+                                <div id="updateStatusContent" class="d-none">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <div>
+                                            <strong>Current Version:</strong> <span id="currentVersionText">-</span>
+                                        </div>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="autoUpdateToggle" checked>
+                                            <label class="form-check-label" for="autoUpdateToggle">Auto-update</label>
+                                        </div>
+                                    </div>
+                                    
+                                    <div id="upToDateMessage" class="alert alert-success d-none">
+                                        <div class="d-flex">
+                                            <i class="bi bi-check-circle fs-3 me-3"></i>
+                                            <div>
+                                                <h5 class="mb-1">Up to Date</h5>
+                                                <p class="mb-0">You're running the latest version.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div id="updateAvailableMessage" class="alert alert-info d-none">
+                                        <div class="d-flex">
+                                            <i class="bi bi-arrow-up-circle fs-3 me-3"></i>
+                                            <div>
+                                                <h5 class="mb-1">Update Available</h5>
+                                                <p class="mb-0">Version <span id="latestVersionText">-</span> is available.</p>
+                                                <div id="releaseNotesContainer" class="mt-2">
+                                                    <strong>Release Notes:</strong>
+                                                    <pre id="releaseNotes" class="mt-2 p-3 bg-light rounded">-</pre>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <button id="updateNowBtn" class="btn btn-primary">
+                                                        <i class="bi bi-cloud-download me-1"></i> Update Now
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div id="updateErrorMessage" class="alert alert-danger d-none">
+                                        <div class="d-flex">
+                                            <i class="bi bi-exclamation-triangle fs-3 me-3"></i>
+                                            <div>
+                                                <h5 class="mb-1">Update Check Failed</h5>
+                                                <p class="mb-0" id="updateErrorText">Unable to check for updates.</p>
+                                                <button id="retryUpdateBtn" class="btn btn-sm btn-outline-danger mt-2">
+                                                    <i class="bi bi-arrow-repeat me-1"></i> Retry
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mt-3 text-end">
+                                        <button id="manualCheckUpdateBtn" class="btn btn-outline-secondary">
+                                            <i class="bi bi-arrow-repeat me-1"></i> Check for Updates
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    
+    <!-- Enhanced Folder Path Handling Script -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const watchFolderPath = document.getElementById('watchFolderPath');
+        const saveFolderBtn = document.getElementById('saveFolderBtn');
+        const startMonitoringBtn = document.getElementById('startMonitoringBtn');
+        const folderStatus = document.getElementById('folderStatus');
+        
+        // Enhanced direct folder input approach - more reliable than file picker
+        saveFolderBtn.addEventListener('click', function() {
+            const folderPath = watchFolderPath.value.trim();
+            
+            if (!folderPath) {
+                showToast('Error', 'Please enter a folder path', 'danger');
+                return;
+            }
+            
+            // Show loading indicator
+            saveFolderBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Saving...';
+            saveFolderBtn.disabled = true;
+            
+            // Verify the path server-side
+            validateAndSaveFolderPath(folderPath);
+        });
+        
+        // Direct input validation on blur
+        watchFolderPath.addEventListener('blur', function() {
+            if (this.value.trim()) {
+                validateFolderPath(this.value.trim());
+            }
+        });
+        
+        // Function to validate and save folder path
+        function validateAndSaveFolderPath(folderPath) {
+            // First verify if the path is valid
+            fetch('/api/folder/verify', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ folder_path: folderPath })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success || data.warning) {
+                    // Path is valid or has issues but is usable, save it
+                    saveFolderPath(data.folder_path);
+                } else {
+                    // Path is invalid
+                    saveFolderBtn.innerHTML = '<i class="bi bi-save me-1"></i> Save';
+                    saveFolderBtn.disabled = false;
+                    
+                    showFolderError(data.error || 'Invalid folder path');
+                    showToast('Error', data.error || 'Invalid folder path', 'danger');
+                }
+            })
+            .catch(error => {
+                saveFolderBtn.innerHTML = '<i class="bi bi-save me-1"></i> Save';
+                saveFolderBtn.disabled = false;
+                
+                console.error('Error validating folder path:', error);
+                showToast('Error', 'Error validating folder path', 'danger');
+            });
+        }
+        
+        // Function to verify a folder path
+        function validateFolderPath(folderPath) {
+            fetch('/api/folder/verify', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ folder_path: folderPath })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showFolderSuccess(data.message || 'Folder is valid and accessible');
+                } else if (data.warning) {
+                    showFolderWarning(data.error || 'Folder may have limited access');
+                } else {
+                    showFolderError(data.error || 'Invalid folder path');
+                }
+            })
+            .catch(error => {
+                console.error('Error validating folder path:', error);
+                showFolderError('Error validating folder path');
+            });
+        }
+        
+        // Function to save folder path
+        function saveFolderPath(folderPath) {
+            // Save to config
+            fetch('/api/settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    watch_folder: folderPath
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                saveFolderBtn.innerHTML = '<i class="bi bi-save me-1"></i> Save';
+                saveFolderBtn.disabled = false;
+                
+                if (data.success) {
+                    // Update the input field with the normalized path
+                    if (data.config && data.config.watch_folder) {
+                        watchFolderPath.value = data.config.watch_folder;
+                    }
+                    
+                    showToast('Success', 'Folder path saved successfully!', 'success');
+                    showFolderSuccess('Folder saved and ready for monitoring');
+                    
+                    // Enable start monitoring button if authenticated
+                    if (isAuthenticated && !isMonitoring) {
+                        startMonitoringBtn.disabled = false;
+                    }
+                } else {
+                    showToast('Error', 'Failed to save folder path: ' + (data.error || 'Unknown error'), 'danger');
+                    showFolderError('Failed to save folder path: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                saveFolderBtn.innerHTML = '<i class="bi bi-save me-1"></i> Save';
+                saveFolderBtn.disabled = false;
+                
+                console.error('Error saving folder path:', error);
+                showToast('Error', 'Error saving folder path', 'danger');
+            });
+        }
+        
+        // Status display functions
+        function showFolderSuccess(message) {
+            folderStatus.className = 'alert alert-success mb-3';
+            folderStatus.innerHTML = `<i class="bi bi-check-circle me-2"></i>${message}`;
+            folderStatus.classList.remove('d-none');
+        }
+        
+        function showFolderWarning(message) {
+            folderStatus.className = 'alert alert-warning mb-3';
+            folderStatus.innerHTML = `<i class="bi bi-exclamation-triangle me-2"></i>${message}`;
+            folderStatus.classList.remove('d-none');
+        }
+        
+        function showFolderError(message) {
+            folderStatus.className = 'alert alert-danger mb-3';
+            folderStatus.innerHTML = `<i class="bi bi-x-circle me-2"></i>${message}`;
+            folderStatus.classList.remove('d-none');
+        }
+        
+        // If we have a pre-existing path, validate it
+        if (watchFolderPath.value.trim()) {
+            validateFolderPath(watchFolderPath.value.trim());
+        }
+    });
+    </script>
+</body>
+</html>

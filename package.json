@@ -1,0 +1,54 @@
+{
+  "name": "youtube-auto-uploader",
+  "version": "1.0.0",
+  "description": "Desktop application for automatically uploading videos to YouTube",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "build": "electron-builder",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "auto-launch": "^5.0.5",
+    "electron-log": "^4.4.8",
+    "electron-store": "^8.1.0",
+    "portfinder": "^1.0.32",
+    "wait-on": "^7.0.1"
+  },
+  "devDependencies": {
+    "electron": "^25.3.0",
+    "electron-builder": "^24.4.0"
+  },
+  "build": {
+    "appId": "com.youtubeuploaderapp",
+    "productName": "YouTube Auto Uploader",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "flask_app",
+        "to": "flask_app",
+        "filter": ["**/*", "!**/__pycache__", "!**/*.pyc"]
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "electron/icons/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "YouTube Auto Uploader"
+    }
+  }
+}
