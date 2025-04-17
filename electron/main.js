@@ -7,10 +7,15 @@ const portfinder = require('portfinder');
 const isDev = process.env.NODE_ENV === 'development';
 const Store = require('electron-store');
 const log = require('electron-log');
+const { autoUpdater } = require('electron-updater');
 
 // Configure logger
 log.transports.file.level = 'info';
 log.info('Application starting...');
+
+// Configure auto-updater
+autoUpdater.logger = log;
+autoUpdater.autoDownload = false;
 
 // Initialize settings store
 const store = new Store({
@@ -147,7 +152,7 @@ const startFlaskServer = async () => {
             if (!mainWindow) {
               createWindow();
             } else {
-              mainWindow.loadURL(`http://localhost:${flaskPort}`);
+              mainWindow.loadURL(`http://127.0.0.1:${flaskPort}`);
             }
           }
         });
@@ -169,7 +174,7 @@ const startFlaskServer = async () => {
             if (!mainWindow) {
               createWindow();
             } else {
-              mainWindow.loadURL(`http://localhost:${flaskPort}`);
+              mainWindow.loadURL(`http://127.0.0.1:${flaskPort}`);
             }
           }
         });
@@ -213,7 +218,7 @@ const startFlaskServer = async () => {
         if (!mainWindow) {
           createWindow();
         } else {
-          mainWindow.loadURL(`http://localhost:${flaskPort}`);
+          mainWindow.loadURL(`http://127.0.0.1:${flaskPort}`);
         }
         return true;
       }
@@ -230,7 +235,7 @@ const startFlaskServer = async () => {
             if (!mainWindow) {
               createWindow();
             } else {
-              mainWindow.loadURL(`http://localhost:${flaskPort}`);
+              mainWindow.loadURL(`http://127.0.0.1:${flaskPort}`);
             }
             return true;
           }
@@ -265,6 +270,55 @@ const stopFlaskServer = () => {
   }
 };
 
+// Set up auto-updater
+function setupAutoUpdater() {
+  autoUpdater.on('checking-for-update', () => {
+    log.info('Checking for updates...');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    log.info('Update available:', info);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-available', info);
+    }
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    log.info('Update not available:', info);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-not-available');
+    }
+  });
+
+  autoUpdater.on('error', (err) => {
+    log.error('Error in auto-updater:', err);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-error', err.message);
+    }
+  });
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    log.info(`Download progress: ${progressObj.percent}%`);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-progress', progressObj);
+    }
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    log.info('Update downloaded:', info);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-downloaded', info);
+    }
+  });
+
+  // Check for updates once an hour
+  setInterval(() => {
+    autoUpdater.checkForUpdates().catch(err => {
+      log.error('Error checking for updates:', err);
+    });
+  }, 60 * 60 * 1000);
+}
+
 // Create the main application window
 const createWindow = () => {
   mainWindow = new BrowserWindow({
@@ -279,7 +333,7 @@ const createWindow = () => {
   });
 
   // Load the Flask app URL
-  mainWindow.loadURL(`http://localhost:${flaskPort}`);
+  mainWindow.loadURL(`http://127.0.0.1:${flaskPort}`);
 
   // Open external links in browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -343,6 +397,15 @@ const createTray = () => {
     },
     { type: 'separator' },
     {
+      label: 'Check for Updates',
+      click: () => {
+        autoUpdater.checkForUpdates().catch(err => {
+          log.error('Error checking for updates:', err);
+        });
+      }
+    },
+    { type: 'separator' },
+    {
       label: 'Quit',
       click: () => {
         quitting = true;
@@ -395,6 +458,21 @@ ipcMain.handle('restart-app', () => {
   app.exit(0);
 });
 
+// Add update-related IPC handlers
+ipcMain.handle('check-for-updates', () => {
+  return autoUpdater.checkForUpdates();
+});
+
+ipcMain.handle('download-update', () => {
+  autoUpdater.downloadUpdate();
+  return true;
+});
+
+ipcMain.handle('install-update', () => {
+  autoUpdater.quitAndInstall(false, true);
+  return true;
+});
+
 // Application initialization
 app.whenReady().then(async () => {
   try {
@@ -403,8 +481,16 @@ app.whenReady().then(async () => {
     // Create system tray
     createTray();
     
+    // Set up auto-updater
+    setupAutoUpdater();
+    
     // Start the Flask server
     await startFlaskServer();
+    
+    // Check for updates after initialization
+    autoUpdater.checkForUpdates().catch(err => {
+      log.error('Error checking for updates on startup:', err);
+    });
     
     log.info('Initialization complete');
   } catch (error) {
