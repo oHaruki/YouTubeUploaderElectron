@@ -394,7 +394,7 @@
                             </div>
                         </div>
 
-                        <!-- Updates Card - New section -->
+                        <!-- Updates Card -->
                         <div class="card mt-4 fade-in">
                             <div class="card-header">
                                 <i class="bi bi-cloud-arrow-down me-2"></i>Updates
@@ -465,6 +465,43 @@
                                             <i class="bi bi-arrow-repeat me-1"></i> Check for Updates
                                         </button>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Version History Card -->
+                        <div class="card mt-4 fade-in">
+                            <div class="card-header">
+                                <i class="bi bi-layers me-2"></i>Version History
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-3">Select a specific version to install:</p>
+                                
+                                <ul class="nav nav-tabs mb-3" id="versionsTabs" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link active" id="versions-tab" data-bs-toggle="tab" data-bs-target="#versions-tab-pane" type="button" role="tab" aria-controls="versions-tab-pane" aria-selected="true">
+                                            Available Versions
+                                        </button>
+                                    </li>
+                                </ul>
+                                
+                                <div class="tab-content" id="versionsTabsContent">
+                                    <div class="tab-pane fade show active" id="versions-tab-pane" role="tabpanel" aria-labelledby="versions-tab" tabindex="0">
+                                        <div id="versionList">
+                                            <!-- Versions will be loaded here -->
+                                            <div class="text-center">
+                                                <div class="spinner-border text-primary" role="status">
+                                                    <span class="visually-hidden">Loading versions...</span>
+                                                </div>
+                                                <p class="mt-2">Loading available versions...</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="alert alert-warning mt-3">
+                                    <i class="bi bi-exclamation-triangle me-2"></i>
+                                    <strong>Warning:</strong> Installing older versions may cause compatibility issues with newer configuration files.
                                 </div>
                             </div>
                         </div>

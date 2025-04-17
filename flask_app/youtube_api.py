@@ -12,18 +12,42 @@ from googleapiclient.http import MediaFileUpload, HttpRequest
 from googleapiclient.errors import HttpError
 from google.auth.transport.requests import Request
 
+print(f"ELECTRON_APP environment variable: {os.environ.get('ELECTRON_APP')}")
+print(f"Current working directory: {os.getcwd()}")
+
 # YouTube API constants
 SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
 API_SERVICE_NAME = 'youtube'
 API_VERSION = 'v3'
 
-# Directories for API credentials
-API_CREDENTIALS_DIR = 'credentials'
-TOKENS_DIR = 'tokens'
-
-# Legacy paths for backward compatibility
-CLIENT_SECRETS_FILE = 'client_secret.json'
-TOKEN_PICKLE_FILE = 'token.pickle'
+# Determine appropriate directories for storing credentials
+if os.environ.get('ELECTRON_APP') == 'true' or os.path.exists(os.path.join(os.getcwd(), 'resources')):  # Second check helps detect Electron
+    # Use app data directory when running in Electron
+    if os.name == 'nt':  # Windows
+        APP_DATA_DIR = os.path.join(os.environ.get('APPDATA', ''), 'youtube-auto-uploader')
+    elif os.name == 'darwin':  # macOS
+        APP_DATA_DIR = os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', 'youtube-auto-uploader')
+    else:  # Linux
+        APP_DATA_DIR = os.path.join(os.path.expanduser('~'), '.youtube-auto-uploader')
+    
+    # Create directory if it doesn't exist
+    os.makedirs(APP_DATA_DIR, exist_ok=True)
+    print(f"Using Electron app data directory: {APP_DATA_DIR}")
+    
+    API_CREDENTIALS_DIR = os.path.join(APP_DATA_DIR, 'credentials')
+    TOKENS_DIR = os.path.join(APP_DATA_DIR, 'tokens')
+    
+    # Legacy paths for backward compatibility in Electron
+    CLIENT_SECRETS_FILE = os.path.join(APP_DATA_DIR, 'client_secret.json')
+    TOKEN_PICKLE_FILE = os.path.join(APP_DATA_DIR, 'token.pickle')
+else:
+    # Regular relative paths when running as Flask app
+    API_CREDENTIALS_DIR = 'credentials'
+    TOKENS_DIR = 'tokens'
+    
+    # Legacy paths for backward compatibility
+    CLIENT_SECRETS_FILE = 'client_secret.json'
+    TOKEN_PICKLE_FILE = 'token.pickle'
 
 # Create necessary directories
 os.makedirs(API_CREDENTIALS_DIR, exist_ok=True)

@@ -730,3 +730,92 @@ def api_add_project():
         'success': True,
         'project_id': project_id
     })
+
+# Version selection routes
+@api_bp.route('/updates/versions', methods=['GET'])
+def get_available_versions():
+    """Get list of all available versions"""
+    import requests
+    import auto_updater
+    
+    try:
+        # Fetch releases from GitHub
+        response = requests.get("https://api.github.com/repos/oHaruki/YouTubeUploaderElectron/releases", timeout=10)
+        response.raise_for_status()
+        
+        releases = response.json()
+        versions = []
+        
+        for release in releases:
+            versions.append({
+                'version': release.get('tag_name', '').lstrip('v'),
+                'name': release.get('name', ''),
+                'date': release.get('published_at', ''),
+                'notes': release.get('body', ''),
+                'id': release.get('id', '')
+            })
+        
+        return jsonify({
+            'success': True,
+            'versions': versions,
+            'current_version': auto_updater.get_current_version()
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@api_bp.route('/updates/install/<version_id>', methods=['POST'])
+def install_specific_version(version_id):
+    """Install a specific version"""
+    import requests
+    import auto_updater
+    
+    try:
+        # Fetch specific release
+        response = requests.get(f"https://api.github.com/repos/oHaruki/YouTubeUploaderElectron/releases/{version_id}", timeout=10)
+        response.raise_for_status()
+        
+        release = response.json()
+        download_url = None
+        
+        # Find ZIP asset
+        for asset in release.get("assets", []):
+            if asset.get("name", "").endswith(".zip"):
+                download_url = asset.get("browser_download_url")
+                break
+        
+        if not download_url:
+            return jsonify({
+                'success': False,
+                'error': 'No download available for this version'
+            })
+        
+        version = release.get('tag_name', '').lstrip('v')
+        
+        # Download and apply
+        zip_path = auto_updater.download_update(download_url)
+        if not zip_path:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to download update'
+            })
+        
+        success = auto_updater.apply_update(zip_path, version)
+        if not success:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to apply update'
+            })
+        
+        return jsonify({
+            'success': True,
+            'message': f'Updated to version {version}',
+            'require_restart': True
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })

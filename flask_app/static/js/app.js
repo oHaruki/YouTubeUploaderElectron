@@ -62,6 +62,11 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('settings-tab').addEventListener('shown.bs.tab', function (e) {
         loadChannels();
     });
+
+    // Versions tab event listener
+    document.getElementById('versions-tab')?.addEventListener('shown.bs.tab', function() {
+        loadAvailableVersions();
+    });
     
     console.log("App initialized successfully");
 });
@@ -834,8 +839,6 @@ function uploadApiProject() {
     });
 }
 
-// Add this to the bottom of static/js/app.js
-
 // Updates functionality
 function checkForUpdates() {
     console.log("Checking for updates");
@@ -988,6 +991,104 @@ function restartApplication() {
     .catch(error => {
         console.error('Error restarting application:', error);
         showToast('Error', 'Error restarting application', 'danger');
+    });
+}
+
+// Version selection functions
+function loadAvailableVersions() {
+    console.log("Loading available versions");
+    
+    const versionListEl = document.getElementById('versionList');
+    if (!versionListEl) return;
+    
+    versionListEl.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"></div><p class="mt-2">Loading versions...</p></div>';
+    
+    fetch('/api/updates/versions')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const currentVersion = data.current_version;
+                
+                if (data.versions.length === 0) {
+                    versionListEl.innerHTML = '<div class="alert alert-info">No versions available</div>';
+                    return;
+                }
+                
+                let html = '<div class="list-group">';
+                data.versions.forEach(version => {
+                    const date = new Date(version.date).toLocaleDateString();
+                    const isCurrent = version.version === currentVersion;
+                    
+                    html += `
+                        <a href="#" class="list-group-item list-group-item-action ${isCurrent ? 'active' : ''}" 
+                           data-version-id="${version.id}" data-version="${version.version}">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">${version.name || 'Version ' + version.version}</h6>
+                                <small>${date}</small>
+                            </div>
+                            <p class="mb-1">${version.notes || 'No release notes available'}</p>
+                            ${isCurrent ? 
+                                '<span class="badge bg-success">Current Version</span>' : 
+                                `<button class="btn btn-sm btn-primary mt-2" onclick="installVersion('${version.id}', '${version.version}', event)">
+                                    <i class="bi bi-download me-1"></i> Install This Version
+                                </button>`
+                            }
+                        </a>
+                    `;
+                });
+                html += '</div>';
+                
+                versionListEl.innerHTML = html;
+            } else {
+                versionListEl.innerHTML = `<div class="alert alert-danger">Failed to load versions: ${data.error}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading versions:', error);
+            versionListEl.innerHTML = '<div class="alert alert-danger">Error loading versions</div>';
+        });
+}
+
+function installVersion(versionId, versionNumber, event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    
+    console.log(`Installing version ${versionNumber} (ID: ${versionId})`);
+    
+    if (!confirm(`Are you sure you want to install version ${versionNumber}? The application will restart.`)) {
+        return;
+    }
+    
+    const button = event.target.closest('button');
+    const originalText = button.innerHTML;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Installing...';
+    button.disabled = true;
+    
+    fetch(`/api/updates/install/${versionId}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Success', `Version ${versionNumber} installed successfully! Restarting...`, 'success');
+            
+            // Restart the application
+            setTimeout(() => {
+                restartApplication();
+            }, 3000);
+        } else {
+            button.innerHTML = originalText;
+            button.disabled = false;
+            showToast('Error', 'Installation failed: ' + (data.error || 'Unknown error'), 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error installing version:', error);
+        button.innerHTML = originalText;
+        button.disabled = false;
+        showToast('Error', 'Error installing version', 'danger');
     });
 }
 

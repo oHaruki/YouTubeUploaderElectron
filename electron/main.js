@@ -9,6 +9,9 @@ const Store = require('electron-store');
 const log = require('electron-log');
 const { autoUpdater } = require('electron-updater');
 
+// Remove application menu
+Menu.setApplicationMenu(null);
+
 // Configure logger
 log.transports.file.level = 'info';
 log.info('Application starting...');
@@ -325,12 +328,18 @@ const createWindow = () => {
     width: 1024,
     height: 768,
     title: 'YouTube Auto Uploader',
+    autoHideMenuBar: true,
+    menuBarVisible: false,
+    icon: path.join(__dirname, 'icons', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false
     }
   });
+
+  // Set menu to null to completely remove it
+  mainWindow.setMenu(null);
 
   // Load the Flask app URL
   mainWindow.loadURL(`http://127.0.0.1:${flaskPort}`);
