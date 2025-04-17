@@ -98,7 +98,6 @@ const tryConnect = async (port) => {
   });
 };
 
-// Start Flask server
 const startFlaskServer = async () => {
   if (serverRunning) {
     log.info('Flask server is already running');
@@ -130,17 +129,17 @@ const startFlaskServer = async () => {
     }
     log.info(`Using script path: ${scriptPath}`);
     
-    // Environment variables for Flask
+    // Environment variables for Flask - THIS IS THE CRITICAL PART
     const env = { 
       ...process.env, 
       PORT: flaskPort.toString(), 
-      ELECTRON_APP: 'true',
+      ELECTRON_APP: 'true',  // This ensures the Flask app knows it's running in Electron
       PYTHONUNBUFFERED: '1' // Ensure Python output is not buffered
     };
     
     // Start Flask as a child process
     flaskProcess = spawn(pythonCommand, [scriptPath], { 
-      env,
+      env,  // Pass the environment variables here
       shell: true,
       stdio: 'pipe',
       cwd: app.isPackaged ? process.resourcesPath : app.getAppPath() // Set working directory

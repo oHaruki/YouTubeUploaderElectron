@@ -21,19 +21,116 @@ print(f"ELECTRON_APP environment variable: {os.environ.get('ELECTRON_APP')}")
 print(f"Current working directory: {os.getcwd()}")
 print(f"Python executable: {sys.executable}")
 
+def debug_print_environment():
+    """Print detailed environment information for debugging"""
+    print("\n==== DEBUGGING ENVIRONMENT INFO ====")
+    print(f"Python version: {sys.version}")
+    print(f"Current working directory: {os.getcwd()}")
+    print(f"Platform: {sys.platform}")
+    print(f"User home directory: {os.path.expanduser('~')}")
+    print(f"ELECTRON_APP env variable: {os.environ.get('ELECTRON_APP')}")
+    
+    # Check for common locations
+    for location in [
+        os.path.expanduser('~'),
+        os.path.join(os.path.expanduser('~'), '.youtube-auto-uploader'),
+        os.path.join(os.path.expanduser('~'), '.youtube-auto-uploader', 'tokens'),
+        os.path.join(os.path.expanduser('~'), '.youtube-auto-uploader', 'credentials'),
+        os.environ.get('APPDATA', ''),
+        os.path.join(os.environ.get('APPDATA', ''), 'youtube-auto-uploader'),
+        os.path.join(os.environ.get('APPDATA', ''), 'youtube-auto-uploader', 'tokens'),
+        'credentials',
+        'tokens'
+    ]:
+        if location:
+            print(f"Checking location: {location}")
+            print(f"  - Exists: {os.path.exists(location)}")
+            if os.path.exists(location):
+                print(f"  - Is directory: {os.path.isdir(location)}")
+                if os.path.isdir(location):
+                    print(f"  - Readable: {os.access(location, os.R_OK)}")
+                    print(f"  - Writable: {os.access(location, os.W_OK)}")
+                    try:
+                        # List content
+                        files = os.listdir(location)
+                        print(f"  - Contents: {files[:10]}{' (truncated)' if len(files) > 10 else ''}")
+                    except Exception as e:
+                        print(f"  - Error listing contents: {e}")
+    
+    print("==== END ENVIRONMENT INFO ====\n")
+
+def get_guaranteed_token_storage():
+    """Get a guaranteed-writable token storage location"""
+    # Use Documents folder which should be reliably writable
+    if os.name == 'nt':  # Windows
+        docs_folder = os.path.join(os.path.expanduser('~'), 'Documents')
+    else:
+        docs_folder = os.path.expanduser('~/Documents')
+    
+    # Create a hidden folder in Documents
+    token_folder = os.path.join(docs_folder, '.youtube_uploader_tokens')
+    os.makedirs(token_folder, exist_ok=True)
+    
+    print(f"Using guaranteed token storage: {token_folder}")
+    
+    # Test write access
+    try:
+        test_file = os.path.join(token_folder, '.write_test')
+        with open(test_file, 'w') as f:
+            f.write('test')
+        os.remove(test_file)
+        print(f"SUCCESS: Confirmed write access to token folder")
+    except Exception as e:
+        print(f"ERROR: Cannot write to token folder: {e}")
+        
+    return token_folder
+
+# Save and load tokens with simple storage
+def save_token_simple(credentials, project_id="default"):
+    """Save token to a simple, reliable location"""
+    token_folder = get_guaranteed_token_storage()
+    token_file = os.path.join(token_folder, f"youtube_token_{project_id}.pickle")
+    
+    try:
+        print(f"Saving token to: {token_file}")
+        with open(token_file, 'wb') as f:
+            pickle.dump(credentials, f)
+        print(f"SUCCESS: Token saved successfully!")
+        return True
+    except Exception as e:
+        print(f"ERROR saving token: {e}")
+        return False
+
+def load_token_simple(project_id="default"):
+    """Load token from a simple, reliable location"""
+    token_folder = get_guaranteed_token_storage()
+    token_file = os.path.join(token_folder, f"youtube_token_{project_id}.pickle")
+    
+    if not os.path.exists(token_file):
+        print(f"Token file does not exist: {token_file}")
+        return None
+    
+    try:
+        print(f"Loading token from: {token_file}")
+        with open(token_file, 'rb') as f:
+            credentials = pickle.load(f)
+        print(f"SUCCESS: Token loaded successfully!")
+        return credentials
+    except Exception as e:
+        print(f"ERROR loading token: {e}")
+        return None
+
 # YouTube API constants
 SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
 API_SERVICE_NAME = 'youtube'
 API_VERSION = 'v3'
 
+# Print detailed environment info
+debug_print_environment()
+
 # Determine appropriate directories for storing credentials
-# Use multiple methods to detect if running in Electron
-IS_ELECTRON = (
-    os.environ.get('ELECTRON_APP') == 'true' or 
-    os.path.exists(os.path.join(os.getcwd(), 'resources')) or
-    'electron' in os.getcwd().lower() or
-    os.path.exists(os.path.join(os.path.dirname(os.getcwd()), 'resources'))
-)
+# Use simple Electron detection
+IS_ELECTRON = os.environ.get('ELECTRON_APP') == 'true'
 
 print(f"Running in Electron environment: {IS_ELECTRON}")
 
@@ -65,11 +162,195 @@ else:
     CLIENT_SECRETS_FILE = 'client_secret.json'
     TOKEN_PICKLE_FILE = 'token.pickle'
 
+def save_selected_channel(channel_id):
+    """
+    Save the selected channel ID to multiple reliable locations
+    
+    Args:
+        channel_id (str): The selected YouTube channel ID
+    """
+    if not channel_id:
+        print("No channel ID provided to save")
+        return False
+    
+    # List of all possible storage locations to try
+    locations = [
+        # AppData location
+        os.path.join(os.path.expanduser('~'), 'AppData', 'Roaming', 'youtube-auto-uploader', 'channel.txt'),
+        # Home directory (hidden file)
+        os.path.join(os.path.expanduser('~'), '.youtube-auto-uploader-channel.txt'),
+        # Documents folder
+        os.path.join(os.path.expanduser('~'), 'Documents', '.youtube-channel.txt'),
+        # Local AppData
+        os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'youtube-auto-uploader', 'channel.txt'),
+        # Current directory
+        'selected_channel.txt'
+    ]
+    
+    success = False
+    
+    # Try saving to all locations
+    for location in locations:
+        try:
+            # Create directory if needed
+            directory = os.path.dirname(location)
+            if directory and not os.path.exists(directory):
+                os.makedirs(directory, exist_ok=True)
+                
+            # Write the channel ID
+            with open(location, 'w') as f:
+                f.write(channel_id)
+            
+            print(f"Saved channel ID to: {location}")
+            success = True
+        except Exception as e:
+            print(f"Failed to save channel ID to {location}: {e}")
+    
+    # Also save as JSON in home directory for extra reliability
+    try:
+        json_file = os.path.join(os.path.expanduser('~'), '.youtube-channel.json')
+        with open(json_file, 'w') as f:
+            json.dump({"channel_id": channel_id}, f)
+        print(f"Saved channel ID to JSON: {json_file}")
+        success = True
+    except Exception as e:
+        print(f"Failed to save channel ID to JSON: {e}")
+    
+    from config import load_config, save_config
+    
+    # Update config.json directly
+    try:
+        config_data = load_config()
+        config_data['selected_channel_id'] = channel_id
+        save_config(config_data)
+        print(f"Updated channel ID in config.json: {channel_id}")
+        success = True
+    except Exception as e:
+        print(f"Failed to update config.json: {e}")
+    
+    return success
+
+def get_selected_channel():
+    """
+    Get the previously selected channel ID from any available source
+    
+    Returns:
+        str: The channel ID or None if not found
+    """
+    # List of all possible storage locations to try
+    locations = [
+        # Config file (first priority)
+        'config.json',
+        # AppData location
+        os.path.join(os.path.expanduser('~'), 'AppData', 'Roaming', 'youtube-auto-uploader', 'channel.txt'),
+        # Home directory (hidden file)
+        os.path.join(os.path.expanduser('~'), '.youtube-auto-uploader-channel.txt'),
+        # Documents folder
+        os.path.join(os.path.expanduser('~'), 'Documents', '.youtube-channel.txt'),
+        # Local AppData
+        os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'youtube-auto-uploader', 'channel.txt'),
+        # Current directory
+        'selected_channel.txt',
+        # JSON backup
+        os.path.join(os.path.expanduser('~'), '.youtube-channel.json')
+    ]
+    
+    # Try each location
+    for location in locations:
+        try:
+            # Special handling for config.json
+            if location.endswith('.json'):
+                if os.path.exists(location):
+                    if location == 'config.json':
+                        from config import load_config
+                        config_data = load_config()
+                        channel_id = config_data.get('selected_channel_id')
+                        if channel_id:
+                            print(f"Loaded channel ID from config.json: {channel_id}")
+                            return channel_id
+                    else:
+                        # For other JSON files
+                        with open(location, 'r') as f:
+                            data = json.load(f)
+                            channel_id = data.get('channel_id')
+                            if channel_id:
+                                print(f"Loaded channel ID from JSON: {location}")
+                                return channel_id
+            # Normal text files
+            elif os.path.exists(location):
+                with open(location, 'r') as f:
+                    channel_id = f.read().strip()
+                    if channel_id:
+                        print(f"Loaded channel ID from: {location}")
+                        return channel_id
+        except Exception as e:
+            print(f"Failed to load channel ID from {location}: {e}")
+    
+    print("No saved channel ID found in any location")
+    return None
+
+# Add a new function to update all channel storage locations from config.json
+def sync_channel_from_config():
+    """Update all channel storage locations from config.json"""
+    from config import load_config
+    
+    try:
+        config_data = load_config()
+        channel_id = config_data.get('selected_channel_id')
+        
+        if channel_id:
+            print(f"Syncing channel ID from config.json to all locations: {channel_id}")
+            save_selected_channel(channel_id)
+            return True
+        else:
+            print("No channel ID found in config.json to sync")
+            return False
+    except Exception as e:
+        print(f"Error syncing channel ID from config.json: {e}")
+        return False
+
+def ensure_token_directories():
+    """Ensure token directories exist and are writable with detailed error reporting"""
+    for dir_path in [API_CREDENTIALS_DIR, TOKENS_DIR]:
+        try:
+            if not os.path.exists(dir_path):
+                print(f"Creating directory: {dir_path}")
+                os.makedirs(dir_path, exist_ok=True)
+            
+            # Test write permissions
+            test_file = os.path.join(dir_path, '.write_test')
+            try:
+                with open(test_file, 'w') as f:
+                    f.write('test')
+                os.remove(test_file)
+                print(f"Directory {dir_path} is writable")
+            except Exception as e:
+                print(f"WARNING: Directory {dir_path} is not writable: {e}")
+                print(f"Current user: {os.getlogin() if hasattr(os, 'getlogin') else 'unknown'}")
+                print(f"Directory permissions: {oct(os.stat(dir_path).st_mode)}")
+                
+        except Exception as e:
+            print(f"ERROR creating directory {dir_path}: {e}")
+            # Try to create in home directory as fallback
+            fallback_dir = os.path.join(os.path.expanduser('~'), '.youtube-auto-uploader', os.path.basename(dir_path))
+            print(f"Trying fallback directory: {fallback_dir}")
+            try:
+                os.makedirs(fallback_dir, exist_ok=True)
+                print(f"Created fallback directory: {fallback_dir}")
+                return fallback_dir
+            except Exception as fallback_e:
+                print(f"ERROR creating fallback directory: {fallback_e}")
+    
+    return None
+
 # Create necessary directories
 try:
     os.makedirs(API_CREDENTIALS_DIR, exist_ok=True)
     os.makedirs(TOKENS_DIR, exist_ok=True)
     print(f"Created directories: {API_CREDENTIALS_DIR}, {TOKENS_DIR}")
+    
+    # Call our new function to ensure directories
+    ensure_token_directories()
     
     # Test if directories are writable
     test_cred_file = os.path.join(API_CREDENTIALS_DIR, 'write_test.txt')
@@ -197,6 +478,74 @@ def get_youtube_api_with_retry():
     # All subsequent API calls will use our patched execute method
     return build
 
+def get_youtube_service():
+    """
+    Get an authenticated YouTube service, try all available projects if needed
+    
+    Returns:
+        object: YouTube API client if successful, None otherwise
+    """
+    global youtube, active_client_id
+    
+    print("Attempting to get YouTube service...")
+    
+    # If we already have a YouTube client, return it
+    if youtube:
+        print("Using existing YouTube client")
+        return youtube
+    
+    # Try to restore from our simple storage first, for any project
+    projects = get_available_api_projects()
+    
+    if not projects:
+        print("No API projects available")
+        return None
+    
+    print(f"Found {len(projects)} API projects")
+    
+    # First try our simple storage
+    print("Checking simple token storage first...")
+    for project in projects:
+        project_id = project['id']
+        print(f"Checking simple storage for project: {project_id}")
+        
+        credentials = load_token_simple(project_id)
+        if credentials:
+            try:
+                print(f"Found token for project {project_id} in simple storage")
+                
+                # Refresh if needed
+                if credentials.expired and credentials.refresh_token:
+                    print("Token expired, refreshing...")
+                    credentials.refresh(Request())
+                    save_token_simple(credentials, project_id)
+                
+                # Build the client
+                client_builder = get_youtube_api_with_retry()
+                client = client_builder(API_SERVICE_NAME, API_VERSION, credentials=credentials)
+                
+                youtube_clients[project_id] = client
+                youtube = client
+                active_client_id = project_id
+                
+                print(f"SUCCESS: Authenticated with project: {project_id} using simple storage")
+                return client
+            except Exception as e:
+                print(f"Error creating client from simple storage: {e}")
+    
+    # If simple storage didn't work, try the standard approach
+    print("Simple storage check failed, trying standard methods...")
+    
+    # Try each project until one works
+    for project in projects:
+        print(f"Trying standard authentication for project: {project['id']}")
+        client = select_api_project(project['id'])
+        if client:
+            return client
+    
+    print("All authentication attempts failed")
+    return None
+
 def select_api_project(project_id=None):
     """
     Select an API project to use
@@ -217,18 +566,26 @@ def select_api_project(project_id=None):
     
     # If no specific project requested, try to use the one that's already authenticated
     if project_id is None:
-        # First check if we have a previously authenticated project
+        # First check for a project in simple storage
         for project in projects:
-            if os.path.exists(project['token_path']):
+            if load_token_simple(project['id']):
                 project_id = project['id']
-                print(f"Using previously authenticated project: {project_id}")
+                print(f"Found previously authenticated project in simple storage: {project_id}")
                 break
+                
+        # If still no project found, check standard locations
+        if project_id is None:
+            for project in projects:
+                if os.path.exists(project['token_path']):
+                    project_id = project['id']
+                    print(f"Found previously authenticated project in standard location: {project_id}")
+                    break
         
         # If still no project, pick a random one
         if project_id is None and projects:
             project = random.choice(projects)
             project_id = project['id']
-            print(f"Selecting random project: {project_id}")
+            print(f"No authenticated project found, selecting random project: {project_id}")
     
     # Find the selected project
     selected_project = next((p for p in projects if p['id'] == project_id), None)
@@ -243,113 +600,64 @@ def select_api_project(project_id=None):
         active_client_id = project_id
         return youtube
     
-    # Try to authenticate with this project
-    client_file = selected_project['file_path']
-    token_file = selected_project['token_path']
-    token_json = token_file.replace('.pickle', '.json')
+    # Try to authenticate with simple storage first
+    credentials = load_token_simple(project_id)
     
-    print(f"Authenticating with project: {project_id}")
-    print(f"Client file: {client_file}")
-    print(f"Token file: {token_file}")
-    print(f"Token JSON file: {token_json}")
-    print(f"Token file exists: {os.path.exists(token_file)}")
-    print(f"Token JSON exists: {os.path.exists(token_json)}")
-    
-    # First try to load from pickle
-    if os.path.exists(token_file):
-        try:
-            with open(token_file, 'rb') as token:
-                try:
-                    # Try to load the credentials
+    # If simple storage didn't work, try standard paths
+    if not credentials:
+        print(f"No token in simple storage for {project_id}, trying standard location...")
+        client_file = selected_project['file_path']
+        token_file = selected_project['token_path']
+        
+        # Try to load from standard location
+        if os.path.exists(token_file):
+            try:
+                with open(token_file, 'rb') as token:
                     credentials = pickle.load(token)
-                    print(f"Successfully loaded credentials from {token_file}")
-                    
-                    # Verify the credentials object is valid
-                    if not hasattr(credentials, 'token') or not hasattr(credentials, 'refresh_token'):
-                        print("Invalid credentials object, missing token attributes")
-                        return None
-                    
-                except Exception as e:
-                    print(f"Error unpickling credentials: {e}")
-                    print("Creating fresh credentials")
-                    # If loading fails, we'll need to authenticate again
-                    return None
+                print(f"Loaded credentials from standard location: {token_file}")
                 
-                # Check if credentials need refreshing
-                print(f"Credentials expired: {credentials.expired}")
-                print(f"Has refresh token: {bool(credentials.refresh_token)}")
+                # Save to simple storage for next time
+                save_token_simple(credentials, project_id)
                 
-                # Refresh if needed
-                if credentials.expired and credentials.refresh_token:
-                    try:
-                        print("Refreshing expired credentials")
-                        credentials.refresh(Request())
-                        print("Successfully refreshed credentials")
-                    except Exception as refresh_error:
-                        print(f"Error refreshing credentials: {refresh_error}")
-                        # If refresh fails, we might need to re-authenticate
-                        return None
-                    
-                    # Save refreshed token with error handling
-                    try:
-                        with open(token_file, 'wb') as token_out:
-                            pickle.dump(credentials, token_out)
-                        print(f"Saved refreshed credentials to {token_file}")
-                    except Exception as save_error:
-                        print(f"Error saving refreshed credentials: {save_error}")
-                
-                # Use our improved builder with retry logic
-                try:
-                    client_builder = get_youtube_api_with_retry()
-                    client = client_builder(API_SERVICE_NAME, API_VERSION, credentials=credentials)
-                    
-                    youtube_clients[project_id] = client
-                    youtube = client
-                    active_client_id = project_id
-                    print(f"Successfully authenticated with project: {project_id}")
-                    return client
-                except Exception as build_error:
-                    print(f"Error building YouTube client: {build_error}")
-                    return None
-        except Exception as e:
-            print(f"Error loading credentials for project {project_id}: {e}")
+            except Exception as e:
+                print(f"Error loading credentials from standard location: {e}")
+                return None
     
-    # If pickle fails, try JSON backup
-    if os.path.exists(token_json):
+    if not credentials:
+        print(f"No valid credentials found for project {project_id}")
+        return None
+    
+    # Check if credentials need refreshing
+    print(f"Credentials expired: {getattr(credentials, 'expired', 'unknown')}")
+    print(f"Has refresh token: {bool(getattr(credentials, 'refresh_token', None))}")
+    
+    # Refresh if needed
+    if getattr(credentials, 'expired', False) and getattr(credentials, 'refresh_token', None):
         try:
-            print(f"Attempting to load from JSON backup: {token_json}")
-            with open(token_json, 'r') as f:
-                token_data = json.load(f)
-                credentials = google.oauth2.credentials.Credentials(
-                    token=token_data['token'],
-                    refresh_token=token_data['refresh_token'],
-                    token_uri=token_data['token_uri'],
-                    client_id=token_data['client_id'],
-                    client_secret=token_data['client_secret'],
-                    scopes=token_data['scopes']
-                )
-                
-                # Save in pickle format for future use
-                try:
-                    with open(token_file, 'wb') as token_out:
-                        pickle.dump(credentials, token_out)
-                    print(f"Restored pickle credentials from JSON: {token_file}")
-                except Exception as e:
-                    print(f"Error saving restored credentials: {e}")
-                    
-                # Continue with client creation
-                client_builder = get_youtube_api_with_retry()
-                client = client_builder(API_SERVICE_NAME, API_VERSION, credentials=credentials)
-                youtube_clients[project_id] = client
-                youtube = client
-                active_client_id = project_id
-                print(f"Successfully authenticated from JSON with project: {project_id}")
-                return client
-        except Exception as e:
-            print(f"Error loading from JSON backup: {e}")
+            print("Refreshing expired credentials")
+            credentials.refresh(Request())
+            print("Successfully refreshed credentials")
+            
+            # Save refreshed credentials
+            save_token_simple(credentials, project_id)
+            
+        except Exception as refresh_error:
+            print(f"Error refreshing credentials: {refresh_error}")
+            return None
     
-    print(f"No valid tokens found for project {project_id}")
-    return None
+    # Use our improved builder with retry logic
+    try:
+        client_builder = get_youtube_api_with_retry()
+        client = client_builder(API_SERVICE_NAME, API_VERSION, credentials=credentials)
+        
+        youtube_clients[project_id] = client
+        youtube = client
+        active_client_id = project_id
+        print(f"Successfully authenticated with project: {project_id}")
+        return client
+    except Exception as build_error:
+        print(f"Error building YouTube client: {build_error}")
+        return None
 
 def handle_upload_limit_error(previous_client_id):
     """
@@ -370,35 +678,6 @@ def handle_upload_limit_error(previous_client_id):
     for project in projects:
         if project['id'] != previous_client_id and os.path.exists(project['token_path']):
             return select_api_project(project['id'])
-    
-    return None
-
-def get_youtube_service():
-    """
-    Get an authenticated YouTube service, try all available projects if needed
-    
-    Returns:
-        object: YouTube API client if successful, None otherwise
-    """
-    global youtube
-    
-    # If we already have a YouTube client, return it
-    if youtube:
-        return youtube
-    
-    # Try to authenticate with each available project
-    projects = get_available_api_projects()
-    
-    if not projects:
-        # No projects available
-        print("No API projects available")
-        return None
-    
-    # Try each project until one works
-    for project in projects:
-        client = select_api_project(project['id'])
-        if client:
-            return client
     
     return None
 

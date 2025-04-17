@@ -496,10 +496,22 @@ def api_get_channels():
     channels = youtube_api.get_channel_list()
     app_config = config.load_config()
     
+    # Try to get saved channel ID from config
+    selected_channel = app_config.get('selected_channel_id')
+    
+    # If not in config, try our direct method
+    if not selected_channel:
+        selected_channel = youtube_api.get_selected_channel()
+        
+        # If found, save it to config for consistency
+        if selected_channel:
+            app_config['selected_channel_id'] = selected_channel
+            config.save_config(app_config)
+    
     return jsonify({
         'success': True,
         'channels': channels,
-        'selected_channel': app_config.get('selected_channel_id')
+        'selected_channel': selected_channel
     })
 
 @api_bp.route('/channels/select', methods=['POST'])
@@ -524,6 +536,9 @@ def api_select_channel():
     app_config = config.load_config()
     app_config['selected_channel_id'] = channel_id
     config.save_config(app_config)
+    
+    # Also save directly using our new function for extra reliability
+    youtube_api.save_selected_channel(channel_id)
     
     return jsonify({
         'success': True
