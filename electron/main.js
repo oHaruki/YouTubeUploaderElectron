@@ -131,13 +131,19 @@ const startFlaskServer = async () => {
     log.info(`Using script path: ${scriptPath}`);
     
     // Environment variables for Flask
-    const env = { ...process.env, PORT: flaskPort.toString(), ELECTRON_APP: 'true' };
+    const env = { 
+      ...process.env, 
+      PORT: flaskPort.toString(), 
+      ELECTRON_APP: 'true',
+      PYTHONUNBUFFERED: '1' // Ensure Python output is not buffered
+    };
     
     // Start Flask as a child process
     flaskProcess = spawn(pythonCommand, [scriptPath], { 
       env,
       shell: true,
-      stdio: 'pipe'
+      stdio: 'pipe',
+      cwd: app.isPackaged ? process.resourcesPath : app.getAppPath() // Set working directory
     });
     
     flaskProcess.stdout.on('data', (data) => {
@@ -486,6 +492,16 @@ ipcMain.handle('install-update', () => {
 app.whenReady().then(async () => {
   try {
     log.info('App ready, initializing...');
+    
+    // Set working directory to resources path when packaged
+    if (app.isPackaged) {
+      try {
+        process.chdir(process.resourcesPath);
+        log.info(`Changed working directory to: ${process.resourcesPath}`);
+      } catch (error) {
+        log.error('Failed to change working directory:', error);
+      }
+    }
     
     // Create system tray
     createTray();

@@ -3,6 +3,7 @@ Authentication routes for YouTube Auto Uploader
 """
 import os
 import pickle
+import json
 from flask import request, redirect, url_for, render_template
 import google.oauth2.credentials
 import google_auth_oauthlib.flow
@@ -69,8 +70,31 @@ def oauth2callback():
     
     # Store credentials
     credentials = flow.credentials
-    with open(project['token_path'], 'wb') as token:
-        pickle.dump(credentials, token)
+
+    # Save credentials in pickle format
+    try:
+        with open(project['token_path'], 'wb') as token:
+            pickle.dump(credentials, token)
+        print(f"Saved credentials in pickle format to {project['token_path']}")
+    except Exception as e:
+        print(f"Error saving credentials in pickle format: {e}")
+
+    # Also save as JSON for redundancy
+    try:
+        token_json_path = project['token_path'].replace('.pickle', '.json')
+        token_data = {
+            'token': credentials.token,
+            'refresh_token': credentials.refresh_token,
+            'token_uri': credentials.token_uri,
+            'client_id': credentials.client_id,
+            'client_secret': credentials.client_secret,
+            'scopes': credentials.scopes
+        }
+        with open(token_json_path, 'w') as f:
+            json.dump(token_data, f)
+        print(f"Saved token as JSON to {token_json_path}")
+    except Exception as e:
+        print(f"Error saving token as JSON: {e}")
     
     # Build the service
     client_builder = youtube_api.get_youtube_api_with_retry()
@@ -133,8 +157,31 @@ def oauth2callback_project(project_id):
     
     # Store credentials
     credentials = flow.credentials
-    with open(selected_project['token_path'], 'wb') as token:
-        pickle.dump(credentials, token)
+    
+    # Save credentials in pickle format
+    try:
+        with open(selected_project['token_path'], 'wb') as token:
+            pickle.dump(credentials, token)
+        print(f"Saved credentials in pickle format to {selected_project['token_path']}")
+    except Exception as e:
+        print(f"Error saving credentials in pickle format: {e}")
+    
+    # Also save as JSON for redundancy
+    try:
+        token_json_path = selected_project['token_path'].replace('.pickle', '.json')
+        token_data = {
+            'token': credentials.token,
+            'refresh_token': credentials.refresh_token,
+            'token_uri': credentials.token_uri,
+            'client_id': credentials.client_id,
+            'client_secret': credentials.client_secret,
+            'scopes': credentials.scopes
+        }
+        with open(token_json_path, 'w') as f:
+            json.dump(token_data, f)
+        print(f"Saved token as JSON to {token_json_path}")
+    except Exception as e:
+        print(f"Error saving token as JSON: {e}")
     
     # Build and store the service
     client_builder = youtube_api.get_youtube_api_with_retry()
