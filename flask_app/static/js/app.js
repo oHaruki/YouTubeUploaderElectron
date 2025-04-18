@@ -48,6 +48,38 @@ document.addEventListener('DOMContentLoaded', function() {
         uploadApiProject();
     });
     
+    document.getElementById('autoSelectChannelBtn')?.addEventListener('click', function() {
+        // Show loading state
+        this.disabled = true;
+        const originalText = this.innerHTML;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Selecting...';
+        
+        fetch('/api/channels/select-first', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Reset button
+            this.disabled = false;
+            this.innerHTML = originalText;
+            
+            if(data.success) {
+                showToast('Success', 'First channel auto-selected successfully', 'success');
+                loadChannels();
+            } else {
+                showToast('Error', data.error || 'Failed to auto-select channel', 'danger');
+            }
+        })
+        .catch(error => {
+            // Reset button on error
+            this.disabled = false;
+            this.innerHTML = originalText;
+            
+            console.error('Error auto-selecting channel:', error);
+            showToast('Error', 'Failed to auto-select channel', 'danger');
+        });
+    });
+
     // Start refresh interval for queue - more frequent updates
     refreshInterval = setInterval(refreshQueue, 1000); // Changed from 2000 to 1000ms
     refreshQueue(); // Immediate first refresh

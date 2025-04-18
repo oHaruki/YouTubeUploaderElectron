@@ -4,8 +4,23 @@ Configuration management for YouTube Auto Uploader
 import os
 import json
 
-# Default configuration path
-CONFIG_FILE = 'config.json'
+def get_config_path():
+    """Get the absolute path to the config file"""
+    if os.environ.get('ELECTRON_APP') == 'true':
+        # In Electron, use the app data directory
+        if os.name == 'nt':  # Windows
+            app_data = os.environ.get('APPDATA', '')
+            return os.path.join(app_data, 'youtube-auto-uploader', 'config.json')
+        elif os.name == 'darwin':  # macOS
+            return os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', 'youtube-auto-uploader', 'config.json')
+        else:  # Linux
+            return os.path.join(os.path.expanduser('~'), '.youtube-auto-uploader', 'config.json')
+    else:
+        # Regular Flask app
+        return 'config.json'
+
+# Use absolute path when in Electron
+CONFIG_FILE = get_config_path()
 
 def load_config():
     """
@@ -46,6 +61,11 @@ def save_config(config):
     Args:
         config (dict): The configuration to save
     """
+    # Ensure the directory exists
+    directory = os.path.dirname(CONFIG_FILE)
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
+    
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f)
 

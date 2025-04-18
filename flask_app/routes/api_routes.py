@@ -544,6 +544,40 @@ def api_select_channel():
         'success': True
     })
 
+@api_bp.route('/channels/select-first', methods=['POST'])
+def api_select_first_channel():
+    """Auto-select the first available channel"""
+    if not youtube_api.youtube:
+        return jsonify({
+            'success': False,
+            'error': 'Not authenticated with YouTube'
+        })
+    
+    # Get channels list
+    channels = youtube_api.get_channel_list()
+    
+    if not channels or len(channels) == 0:
+        return jsonify({
+            'success': False,
+            'error': 'No channels available'
+        })
+    
+    # Select the first channel
+    channel_id = channels[0]['id']
+    
+    # Store in config
+    app_config = config.load_config()
+    app_config['selected_channel_id'] = channel_id
+    config.save_config(app_config)
+    
+    # Also save using the API function for redundancy
+    youtube_api.save_selected_channel(channel_id)
+    
+    return jsonify({
+        'success': True,
+        'channel_id': channel_id
+    })
+
 #----------------
 # Projects routes
 #----------------

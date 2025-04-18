@@ -38,6 +38,11 @@ let serverRunning = false;
 let quitting = false;
 let startupMinimize = store.get('startMinimized');
 
+// Chrome's blocked ports
+const BLOCKED_PORTS = [
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 77, 79, 87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 139, 143, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540, 556, 563, 587, 601, 636, 993, 995, 2049, 3659, 4045, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6697, 10080
+];
+
 // Extract port from Flask output
 const extractPortFromOutput = (output) => {
   const match = output.match(/Running on http:\/\/127\.0\.0\.1:(\d+)/);
@@ -105,8 +110,13 @@ const startFlaskServer = async () => {
   }
 
   try {
-    // Find an available port
-    flaskPort = await portfinder.getPortPromise({ port: flaskPort });
+    // Find an available port that's not in the blocked list
+    flaskPort = await portfinder.getPortPromise({
+      port: 8000, // Start at 8000 to avoid most blocked ports
+      stopPort: 9000,
+      filter: (port) => !BLOCKED_PORTS.includes(port)
+    });
+    
     store.set('port', flaskPort);
     log.info(`Starting Flask server on port ${flaskPort}...`);
 
@@ -211,7 +221,7 @@ const startFlaskServer = async () => {
     
     // Try to connect to the server with multiple attempts
     let attempts = 0;
-    const portsToTry = [flaskPort, 5000, 5001, 5002, 5003, 5004, 5005];
+    const portsToTry = [flaskPort, 8080, 8081, 8082, 8083, 8084, 8085];
     
     while (Date.now() - startTime < maxWaitTime) {
       attempts++;

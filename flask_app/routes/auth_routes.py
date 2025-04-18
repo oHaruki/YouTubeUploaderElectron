@@ -89,6 +89,30 @@ def oauth2callback():
     youtube_api.active_client_id = project['id']
     youtube_api.youtube = youtube
     
+    # Get channels and auto-select the first one if available
+    channels = youtube_api.get_channel_list()
+    if channels and len(channels) > 0:
+        # Get first channel
+        selected_channel = channels[0]['id']
+        
+        # Save to config
+        from config import update_config
+        update_config({"selected_channel_id": selected_channel})
+        
+        # Save to AppData (for Electron)
+        if os.environ.get('ELECTRON_APP') == 'true' and os.name == 'nt':
+            import json
+            app_data = os.environ.get('APPDATA', '')
+            appdata_path = os.path.join(app_data, 'youtube-auto-uploader', 'channel.json')
+            try:
+                directory = os.path.dirname(appdata_path)
+                os.makedirs(directory, exist_ok=True)
+                with open(appdata_path, 'w') as f:
+                    json.dump({"channel_id": selected_channel}, f)
+                print(f"Auto-selected channel saved to AppData: {selected_channel}")
+            except Exception as e:
+                print(f"Failed to save to AppData: {e}")
+    
     return redirect('/')
 
 @auth_bp.route('/auth/project/<project_id>')

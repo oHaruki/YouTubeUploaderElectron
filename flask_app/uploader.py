@@ -237,16 +237,15 @@ def upload_video(task):
         
         # Create the upload request with channel ID if available
         params = {
-            'part': ','.join(body.keys()),
-            'body': body,
-            'media_body': media
+        'part': ','.join(body.keys()),
+        'body': body,
+        'media_body': media
         }
         
         # Add the onBehalfOfContentOwner parameter if we have a selected channel
         selected_channel_id = app_config.get('selected_channel_id')
         if selected_channel_id:
-            logger.info(f"Uploading on behalf of channel: {selected_channel_id}")
-            params['onBehalfOfContentOwner'] = selected_channel_id
+            logger.info(f"Uploading to channel: {selected_channel_id}")
         
         # Start upload
         logger.info(f"Creating YouTube upload request for {task.filename}")

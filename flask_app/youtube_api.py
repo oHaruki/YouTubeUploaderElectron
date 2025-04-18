@@ -121,7 +121,7 @@ def load_token_simple(project_id="default"):
         return None
 
 # YouTube API constants
-SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
+SCOPES = ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube.readonly']
 API_SERVICE_NAME = 'youtube'
 API_VERSION = 'v3'
 
@@ -228,6 +228,21 @@ def save_selected_channel(channel_id):
     except Exception as e:
         print(f"Failed to update config.json: {e}")
     
+    # Save specifically to AppData for Electron
+    if os.environ.get('ELECTRON_APP') == 'true' and os.name == 'nt':
+        app_data = os.environ.get('APPDATA', '')
+        appdata_path = os.path.join(app_data, 'youtube-auto-uploader', 'channel.json')
+        try:
+            directory = os.path.dirname(appdata_path)
+            if not os.path.exists(directory):
+                os.makedirs(directory, exist_ok=True)
+            with open(appdata_path, 'w') as f:
+                json.dump({"channel_id": channel_id}, f)
+            print(f"Saved channel ID to AppData: {appdata_path}")
+            success = True
+        except Exception as e:
+            print(f"Failed to save to AppData: {e}")
+    
     return success
 
 def get_selected_channel():
@@ -237,70 +252,90 @@ def get_selected_channel():
     Returns:
         str: The channel ID or None if not found
     """
-    # List of all possible storage locations to try
+    # First try getting from config directly
+    try:
+        from config import load_config
+        config_data = load_config()
+        channel_id = config_data.get('selected_channel_id')
+        if channel_id:
+            print(f"Loaded channel ID from config: {channel_id}")
+            return channel_id
+    except Exception as e:
+        print(f"Error loading from config: {e}")
+    
+    # For Electron, prioritize AppData location
+    if os.environ.get('ELECTRON_APP') == 'true':
+        app_data_locations = []
+        if os.name == 'nt':  # Windows
+            app_data = os.environ.get('APPDATA', '')
+            app_data_locations = [
+                os.path.join(app_data, 'youtube-auto-uploader', 'channel.json'),
+                os.path.join(app_data, 'youtube-auto-uploader', 'channel.txt')
+            ]
+        
+        # Try AppData locations first
+        for location in app_data_locations:
+            try:
+                if location.endswith('.json') and os.path.exists(location):
+                    with open(location, 'r') as f:
+                        data = json.load(f)
+                        channel_id = data.get('channel_id')
+                        if channel_id:
+                            print(f"Loaded channel ID from {location}")
+                            return channel_id
+                elif os.path.exists(location):
+                    with open(location, 'r') as f:
+                        channel_id = f.read().strip()
+                        if channel_id:
+                            print(f"Loaded channel ID from {location}")
+                            return channel_id
+            except Exception as e:
+                print(f"Failed to load from {location}: {e}")
+
+    # List of all possible storage locations to try as backup
     locations = [
-        # Config file (first priority)
-        'config.json',
-        # AppData location
-        os.path.join(os.path.expanduser('~'), 'AppData', 'Roaming', 'youtube-auto-uploader', 'channel.txt'),
         # Home directory (hidden file)
         os.path.join(os.path.expanduser('~'), '.youtube-auto-uploader-channel.txt'),
         # Documents folder
         os.path.join(os.path.expanduser('~'), 'Documents', '.youtube-channel.txt'),
-        # Local AppData
-        os.path.join(os.path.expanduser('~'), 'AppData', 'Local', 'youtube-auto-uploader', 'channel.txt'),
         # Current directory
         'selected_channel.txt',
         # JSON backup
         os.path.join(os.path.expanduser('~'), '.youtube-channel.json')
     ]
     
-    # Try each location
+    # Check each location
     for location in locations:
         try:
-            # Special handling for config.json
-            if location.endswith('.json'):
-                if os.path.exists(location):
-                    if location == 'config.json':
-                        from config import load_config
-                        config_data = load_config()
-                        channel_id = config_data.get('selected_channel_id')
-                        if channel_id:
-                            print(f"Loaded channel ID from config.json: {channel_id}")
-                            return channel_id
-                    else:
-                        # For other JSON files
-                        with open(location, 'r') as f:
-                            data = json.load(f)
-                            channel_id = data.get('channel_id')
-                            if channel_id:
-                                print(f"Loaded channel ID from JSON: {location}")
-                                return channel_id
-            # Normal text files
+            if location.endswith('.json') and os.path.exists(location):
+                with open(location, 'r') as f:
+                    data = json.load(f)
+                    channel_id = data.get('channel_id')
+                    if channel_id:
+                        print(f"Loaded channel ID from {location}")
+                        return channel_id
             elif os.path.exists(location):
                 with open(location, 'r') as f:
                     channel_id = f.read().strip()
                     if channel_id:
-                        print(f"Loaded channel ID from: {location}")
+                        print(f"Loaded channel ID from {location}")
                         return channel_id
         except Exception as e:
-            print(f"Failed to load channel ID from {location}: {e}")
+            print(f"Failed to load from {location}: {e}")
     
     print("No saved channel ID found in any location")
     return None
 
-# Add a new function to update all channel storage locations from config.json
 def sync_channel_from_config():
     """Update all channel storage locations from config.json"""
-    from config import load_config
-    
     try:
+        from config import load_config
         config_data = load_config()
-        channel_id = config_data.get('selected_channel_id')
+        saved_channel_id = config_data.get('selected_channel_id')
         
-        if channel_id:
-            print(f"Syncing channel ID from config.json to all locations: {channel_id}")
-            save_selected_channel(channel_id)
+        if saved_channel_id:
+            print(f"Syncing channel ID from config.json to all locations: {saved_channel_id}")
+            save_selected_channel(saved_channel_id)
             return True
         else:
             print("No channel ID found in config.json to sync")
@@ -529,6 +564,16 @@ def get_youtube_service():
                 active_client_id = project_id
                 
                 print(f"SUCCESS: Authenticated with project: {project_id} using simple storage")
+                
+                # After successful authentication, try to restore the channel
+                channel_id = get_selected_channel()
+                if channel_id:
+                    # Update config to ensure it has the channel ID
+                    from config import load_config, update_config
+                    config_data = load_config()
+                    config_data['selected_channel_id'] = channel_id
+                    update_config(config_data)
+                
                 return client
             except Exception as e:
                 print(f"Error creating client from simple storage: {e}")
@@ -709,17 +754,13 @@ def get_upload_limit_status():
     return (upload_limit_reached, upload_limit_reset_time)
 
 def get_channel_list():
-    """
-    Get the list of YouTube channels for the authenticated user
-    
-    Returns:
-        list: List of channel dictionaries if successful, empty list otherwise
-    """
+    """Get the list of YouTube channels for the authenticated user"""
     if not youtube:
+        print("Cannot get channel list: No YouTube client available")
         return []
     
     try:
-        # Request channels list from YouTube API
+        # First try listing by 'mine' parameter
         channels_response = youtube.channels().list(
             part='snippet,contentDetails',
             mine=True
@@ -733,8 +774,36 @@ def get_channel_list():
                 'thumbnail': channel['snippet']['thumbnails']['default']['url'],
                 'uploads_playlist': channel['contentDetails']['relatedPlaylists']['uploads']
             })
+            
+        if not channels:
+            # Fallback - try listing by 'managedByMe' parameter
+            channels_response = youtube.channels().list(
+                part='snippet,contentDetails',
+                managedByMe=True
+            ).execute()
+            
+            for channel in channels_response.get('items', []):
+                channels.append({
+                    'id': channel['id'],
+                    'title': channel['snippet']['title'],
+                    'thumbnail': channel['snippet']['thumbnails']['default']['url'],
+                    'uploads_playlist': channel['contentDetails']['relatedPlaylists']['uploads']
+                })
         
+        print(f"Found {len(channels)} YouTube channels")
         return channels
     except Exception as e:
         print(f"Error getting channel list: {e}")
+        # Return a default channel if available from config
+        from config import load_config
+        config_data = load_config()
+        channel_id = config_data.get('selected_channel_id')
+        if channel_id:
+            print(f"Using fallback channel ID from config: {channel_id}")
+            return [{
+                'id': channel_id,
+                'title': 'Your YouTube Channel',
+                'thumbnail': 'https://www.youtube.com/s/desktop/63c65178/img/favicon_144x144.png',
+                'uploads_playlist': ''
+            }]
         return []

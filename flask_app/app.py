@@ -54,6 +54,13 @@ def init_app_background():
         # Initialize YouTube API
         youtube_api.get_youtube_service()
         
+        # Sync channel selection in Electron environment
+        if os.environ.get('ELECTRON_APP') == 'true':
+            # Get channel ID from config before trying to sync
+            channel_id = app_config.get('selected_channel_id')
+            if channel_id:
+                youtube_api.save_selected_channel(channel_id)
+        
         # Initialize uploader
         uploader.init_uploader()
         
