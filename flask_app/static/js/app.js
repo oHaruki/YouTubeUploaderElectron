@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('clearCompletedBtn').addEventListener('click', clearCompletedUploads);
     document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
     document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
+    document.getElementById('scanFolderOnceBtn').addEventListener('click', scanFolderOnce);
     
     // Set up API projects tab event listeners
     document.getElementById('api-projects-tab').addEventListener('shown.bs.tab', function (e) {
@@ -110,6 +111,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
 // Add the new scan function
+// Scan folder once function
 function scanFolderOnce() {
     console.log("Scanning folder once");
     
@@ -162,11 +164,11 @@ function updateMonitoringButtons() {
     if (isMonitoring) {
         startBtn.disabled = true;
         stopBtn.disabled = false;
-        scanBtn.disabled = true; // Disable scan button during monitoring
+        scanBtn.disabled = !isAuthenticated;
     } else {
         startBtn.disabled = !isAuthenticated;
         stopBtn.disabled = true;
-        scanBtn.disabled = !isAuthenticated; // Enable scan button when not monitoring (if authenticated)
+        scanBtn.disabled = !isAuthenticated;
     }
     
     updateStatusIndicator();
