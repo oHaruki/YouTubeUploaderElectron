@@ -180,6 +180,7 @@ def is_video_file(file_path):
         return False
         
     try:
+        # Case-insensitive check for any video extension
         is_video = any(file_path.lower().endswith(ext) for ext in video_extensions)
         logger.info(f"File extension check for {file_path}: {'MATCH' if is_video else 'NO MATCH'}")
         return is_video
@@ -338,6 +339,7 @@ def get_current_watch_folder():
     """
     return current_watch_folder
 
+
 def scan_folder_once(folder_path):
     """
     Perform a one-time scan of the folder for video files
@@ -378,6 +380,7 @@ def scan_folder_once(folder_path):
     
     # Scan for video files
     video_count = 0
+    skipped_count = 0
     
     try:
         files = os.listdir(folder_path)
@@ -388,19 +391,32 @@ def scan_folder_once(folder_path):
             logger.info(f"Checking file: {file_path}")
             
             if os.path.isfile(file_path):
-                if is_video_file(file_path) and file_path not in processed_files:
-                    if wait_for_file_stability(file_path):
-                        video_count += 1
-                        logger.info(f"Found stable video file: {file_path}")
-                        processed_files.add(file_path)
-                        try:
-                            on_new_file_callback(file_path)
-                        except Exception as e:
-                            logger.error(f"Error processing file {file_path}: {e}")
-                    else:
-                        logger.warning(f"Skipping unstable video file: {file_path}")
+                # Check if it's a video file
+                if is_video_file(file_path):
+                    logger.info(f"Found video file: {file_path}")
+                    
+                    # Skip if already processed
+                    if file_path in processed_files:
+                        logger.info(f"Skipping already processed file: {file_path}")
+                        skipped_count += 1
+                        continue
+                    
+                    # Skip stability check for manual scanning to avoid false negatives
+                    logger.info(f"Processing video file: {file_path}")
+                    video_count += 1
+                    processed_files.add(file_path)
+                    try:
+                        # Call the upload callback
+                        on_new_file_callback(file_path)
+                        logger.info(f"Successfully added to upload queue: {file_path}")
+                    except Exception as e:
+                        logger.error(f"Error processing file {file_path}: {e}")
+                else:
+                    logger.info(f"Not a video file: {file_path}")
+            else:
+                logger.info(f"Not a file: {file_path}")
         
-        logger.info(f"Scanned {len(files)} files, found {video_count} stable videos")
+        logger.info(f"Scan summary: {len(files)} total files, {video_count} added videos, {skipped_count} skipped")
         return True, video_count
     except Exception as e:
         logger.error(f"Error scanning folder: {e}")

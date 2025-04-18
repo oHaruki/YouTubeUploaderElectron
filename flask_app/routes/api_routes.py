@@ -245,6 +245,19 @@ def api_scan_folder():
             'error': f'Error normalizing path: {str(e)}'
         })
     
+    # Verify the folder exists
+    if not os.path.exists(watch_folder):
+        return jsonify({
+            'success': False,
+            'error': f'Folder does not exist: {watch_folder}'
+        })
+        
+    if not os.path.isdir(watch_folder):
+        return jsonify({
+            'success': False,
+            'error': f'Path is not a directory: {watch_folder}'
+        })
+    
     # Perform the scan
     success, video_count = file_monitor.scan_folder_once(watch_folder)
     
@@ -258,7 +271,7 @@ def api_scan_folder():
         'success': True,
         'scanned_count': video_count,
         'message': f'Found {video_count} video files'
-    })    
+    })  
 #--------------
 # Queue routes
 #--------------

@@ -131,10 +131,13 @@ function scanFolderOnce() {
         if (data.success) {
             console.log(`Scan completed: found ${data.scanned_count} videos`);
             
-            // Force immediate queue refresh
-            refreshQueue();
-            
-            showToast('Success', `Scanned folder and found ${data.scanned_count} video files`, 'success');
+            if (data.scanned_count > 0) {
+                // Force immediate queue refresh
+                refreshQueue();
+                showToast('Success', `Scanned folder and found ${data.scanned_count} video files. Check the upload queue!`, 'success');
+            } else {
+                showToast('Info', 'No new video files were found in the folder', 'info');
+            }
         } else {
             console.error(`Failed to scan folder: ${data.error}`);
             showToast('Error', 'Failed to scan folder: ' + (data.error || 'Unknown error'), 'danger');
