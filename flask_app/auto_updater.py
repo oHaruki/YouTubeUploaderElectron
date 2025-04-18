@@ -19,8 +19,8 @@ logging.basicConfig(level=logging.INFO,
                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('auto_updater')
 
-# GitHub repository information
-GITHUB_REPO = "oHaruki/YouTubeAutoUploader"
+# GitHub repository information - CORRECTED
+GITHUB_REPO = "oHaruki/YouTubeUploaderElectron"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 VERSION_FILE = "version.json"
 

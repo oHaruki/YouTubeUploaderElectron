@@ -845,10 +845,11 @@ def get_available_versions():
     """Get list of all available versions"""
     import requests
     import auto_updater
+    import time
     
     try:
-        # Fetch releases from GitHub
-        repo_url = "https://api.github.com/repos/oHaruki/YouTubeAutoUploader/releases"
+        # Use the correct repository URL
+        repo_url = "https://api.github.com/repos/oHaruki/YouTubeUploaderElectron/releases"
         logger.info(f"Fetching available versions from: {repo_url}")
         
         response = requests.get(repo_url, timeout=10)
@@ -857,30 +858,25 @@ def get_available_versions():
         releases = response.json()
         logger.info(f"Found {len(releases)} releases from GitHub API")
         
-        if not releases:
-            # Fallback to provide at least the current version if no releases found
-            logger.warning("No releases found on GitHub, providing fallback version info")
-            current_version = auto_updater.get_current_version()
-            return jsonify({
-                'success': True,
-                'versions': [{
-                    'version': current_version,
-                    'name': f'Current Version {current_version}',
-                    'date': auto_updater.time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    'notes': 'No release notes available.',
-                    'id': 'current'
-                }],
-                'current_version': current_version
-            })
-        
         versions = []
         for release in releases:
             versions.append({
                 'version': release.get('tag_name', '').lstrip('v'),
-                'name': release.get('name', ''),
+                'name': release.get('name', '') or f"Version {release.get('tag_name', '').lstrip('v')}",
                 'date': release.get('published_at', ''),
                 'notes': release.get('body', ''),
-                'id': release.get('id', '')
+                'id': str(release.get('id', ''))
+            })
+        
+        # If no versions found, add current version as fallback
+        if not versions:
+            current_version = auto_updater.get_current_version()
+            versions.append({
+                'version': current_version,
+                'name': f'Current Version {current_version}',
+                'date': time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                'notes': 'No release notes available.',
+                'id': 'current'
             })
         
         return jsonify({
