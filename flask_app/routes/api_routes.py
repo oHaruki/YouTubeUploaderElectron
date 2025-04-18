@@ -907,7 +907,7 @@ def install_specific_version(version_id):
         
         # Find ZIP asset
         for asset in release.get("assets", []):
-            if asset.get("name", "").endswith(".zip"):
+            if asset.get("name", "").endswith((".zip", ".exe")):
                 download_url = asset.get("browser_download_url")
                 break
         
