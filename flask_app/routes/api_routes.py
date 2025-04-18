@@ -214,6 +214,51 @@ def api_stop_monitoring():
             'success': False,
             'error': f'Error stopping monitoring: {str(e)}'
         })
+    
+@api_bp.route('/folder/scan', methods=['POST'])
+def api_scan_folder():
+    """Scan the watch folder once for video files"""
+    if not youtube_api.get_youtube_service():
+        return jsonify({
+            'success': False,
+            'error': 'Not authenticated with YouTube'
+        })
+    
+    app_config = config.load_config()
+    watch_folder = app_config.get('watch_folder')
+    
+    if not watch_folder:
+        return jsonify({
+            'success': False,
+            'error': 'No folder selected for scanning'
+        })
+    
+    # Log the scan attempt
+    print(f"[DEBUG] API: Scanning folder once: {watch_folder}")
+    
+    # Normalize the path just to be safe
+    try:
+        watch_folder = os.path.abspath(os.path.expanduser(watch_folder))
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Error normalizing path: {str(e)}'
+        })
+    
+    # Perform the scan
+    success, video_count = file_monitor.scan_folder_once(watch_folder)
+    
+    if not success:
+        return jsonify({
+            'success': False,
+            'error': f'Failed to scan folder: {watch_folder}'
+        })
+    
+    return jsonify({
+        'success': True,
+        'scanned_count': video_count,
+        'message': f'Found {video_count} video files'
+    })    
 #--------------
 # Queue routes
 #--------------
@@ -231,6 +276,7 @@ def api_get_queue():
         'success': True,
         'queue': queue_data,
         'is_monitoring': file_monitor.get_monitoring_status(),
+        'is_authenticated': youtube_api.youtube is not None,  # Add authentication status
         'upload_limit_reached': limit_reached,
         'upload_limit_reset_time': limit_reset_time.isoformat() if limit_reset_time else None
     })

@@ -80,6 +80,99 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // DOM Ready
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("App initialization started");
+    
+    // Get initial state from the page
+    isMonitoring = document.getElementById('statusIndicator').innerText.includes('Monitoring');
+    isAuthenticated = !document.getElementById('statusIndicator').innerText.includes('Not Authenticated');
+    currentTheme = document.documentElement.getAttribute('data-bs-theme') || 'light';
+    
+    console.log(`Initial state - Monitoring: ${isMonitoring}, Authenticated: ${isAuthenticated}`);
+    
+    // Check for upload limit
+    const limitResetTimeEl = document.getElementById('limitResetTime');
+    if (limitResetTimeEl) {
+        uploadLimitReached = true;
+        const timeData = limitResetTimeEl.getAttribute('data-time');
+        if (timeData) {
+            uploadLimitResetTime = new Date(timeData);
+            console.log(`Upload limit reached, reset time: ${uploadLimitResetTime}`);
+        }
+    }
+    
+    // Setup event listeners
+    document.getElementById('startMonitoringBtn').addEventListener('click', startMonitoring);
+    document.getElementById('stopMonitoringBtn').addEventListener('click', stopMonitoring);
+    document.getElementById('scanFolderOnceBtn').addEventListener('click', scanFolderOnce);
+    document.getElementById('clearCompletedBtn').addEventListener('click', clearCompletedUploads);
+    document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+    document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
+    
+    // Rest of initialization code...
+});
+
+// Add the new scan function
+function scanFolderOnce() {
+    console.log("Scanning folder once");
+    
+    // Show loading indicator on the button
+    const scanBtn = document.getElementById('scanFolderOnceBtn');
+    const originalText = scanBtn.innerHTML;
+    scanBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Scanning...';
+    scanBtn.disabled = true;
+    
+    fetch('/api/folder/scan', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Restore button
+        scanBtn.innerHTML = originalText;
+        scanBtn.disabled = false;
+        
+        if (data.success) {
+            console.log(`Scan completed: found ${data.scanned_count} videos`);
+            
+            // Force immediate queue refresh
+            refreshQueue();
+            
+            showToast('Success', `Scanned folder and found ${data.scanned_count} video files`, 'success');
+        } else {
+            console.error(`Failed to scan folder: ${data.error}`);
+            showToast('Error', 'Failed to scan folder: ' + (data.error || 'Unknown error'), 'danger');
+        }
+    })
+    .catch(error => {
+        // Restore button
+        scanBtn.innerHTML = originalText;
+        scanBtn.disabled = false;
+        
+        console.error('Error scanning folder:', error);
+        showToast('Error', 'Error scanning folder. Check console for details.', 'danger');
+    });
+}
+
+// Update function to reflect button state
+function updateMonitoringButtons() {
+    const startBtn = document.getElementById('startMonitoringBtn');
+    const stopBtn = document.getElementById('stopMonitoringBtn');
+    const scanBtn = document.getElementById('scanFolderOnceBtn');
+    
+    if (isMonitoring) {
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        scanBtn.disabled = true; // Disable scan button during monitoring
+    } else {
+        startBtn.disabled = !isAuthenticated;
+        stopBtn.disabled = true;
+        scanBtn.disabled = !isAuthenticated; // Enable scan button when not monitoring (if authenticated)
+    }
+    
+    updateStatusIndicator();
+}
+
     // Start refresh interval for queue - more frequent updates
     refreshInterval = setInterval(refreshQueue, 1000); // Changed from 2000 to 1000ms
     refreshQueue(); // Immediate first refresh
@@ -149,6 +242,24 @@ function refreshQueue() {
                 
                 uploadQueue = data.queue;
                 const newMonitoringState = data.is_monitoring;
+                
+                // Check if authentication state changed
+                if (data.hasOwnProperty('is_authenticated') && isAuthenticated !== data.is_authenticated) {
+                    console.log(`Authentication state changed: ${isAuthenticated} -> ${data.is_authenticated}`);
+                    isAuthenticated = data.is_authenticated;
+                    updateMonitoringButtons();
+                    updateStatusIndicator();
+                    
+                    // Handle auth warning banner
+                    const authBanner = document.getElementById('authWarningBanner');
+                    if (authBanner && isAuthenticated) {
+                        authBanner.style.display = 'none';
+                    } else if (isAuthenticated) {
+                        // If banner doesn't exist but we just got authenticated, refresh the page
+                        // This is a fallback in case the DOM manipulation approach doesn't work
+                        location.reload();
+                    }
+                }
                 
                 // Check if monitoring state changed
                 if (isMonitoring !== newMonitoringState) {
