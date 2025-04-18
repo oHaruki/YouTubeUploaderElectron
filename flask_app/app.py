@@ -64,13 +64,8 @@ def init_app_background():
         # Initialize uploader
         uploader.init_uploader()
         
-        # Start monitoring if configured
-        if app_config.get('watch_folder') and youtube_api.get_youtube_service():
-            file_monitor.start_monitoring(
-                app_config.get('watch_folder'),
-                app_config.get('check_existing_files', True)
-            )
-            
+        # REMOVED: Auto-start monitoring
+        
         # Check for updates
         if auto_updater.is_auto_update_enabled():
             logger.info("Checking for updates...")

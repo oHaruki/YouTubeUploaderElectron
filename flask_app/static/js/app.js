@@ -81,37 +81,33 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // DOM Ready
-document.addEventListener('DOMContentLoaded', function() {
-    console.log("App initialization started");
-    
-    // Get initial state from the page
-    isMonitoring = document.getElementById('statusIndicator').innerText.includes('Monitoring');
-    isAuthenticated = !document.getElementById('statusIndicator').innerText.includes('Not Authenticated');
-    currentTheme = document.documentElement.getAttribute('data-bs-theme') || 'light';
-    
-    console.log(`Initial state - Monitoring: ${isMonitoring}, Authenticated: ${isAuthenticated}`);
-    
-    // Check for upload limit
-    const limitResetTimeEl = document.getElementById('limitResetTime');
-    if (limitResetTimeEl) {
-        uploadLimitReached = true;
-        const timeData = limitResetTimeEl.getAttribute('data-time');
-        if (timeData) {
-            uploadLimitResetTime = new Date(timeData);
-            console.log(`Upload limit reached, reset time: ${uploadLimitResetTime}`);
-        }
-    }
-    
-    // Setup event listeners
-    document.getElementById('startMonitoringBtn').addEventListener('click', startMonitoring);
-    document.getElementById('stopMonitoringBtn').addEventListener('click', stopMonitoring);
-    document.getElementById('scanFolderOnceBtn').addEventListener('click', scanFolderOnce);
-    document.getElementById('clearCompletedBtn').addEventListener('click', clearCompletedUploads);
-    document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
-    document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
-    
-    // Rest of initialization code...
-});
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log("App initialization started");
+        
+        // Get initial state from the page
+        isMonitoring = document.getElementById('statusIndicator').innerText.includes('Monitoring');
+        isAuthenticated = !document.getElementById('statusIndicator').innerText.includes('Not Authenticated');
+        currentTheme = document.documentElement.getAttribute('data-bs-theme') || 'light';
+        
+        console.log(`Initial state - Monitoring: ${isMonitoring}, Authenticated: ${isAuthenticated}`);
+        
+        // Setup event listeners
+        document.getElementById('startMonitoringBtn').addEventListener('click', startMonitoring);
+        document.getElementById('stopMonitoringBtn').addEventListener('click', stopMonitoring);
+        document.getElementById('scanFolderOnceBtn').addEventListener('click', scanFolderOnce);
+        document.getElementById('clearCompletedBtn').addEventListener('click', clearCompletedUploads);
+        document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+        document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
+        
+        // Initialize button states
+        updateMonitoringButtons();
+        
+        // Rest of initialization code...
+        
+        // Start refresh interval for queue
+        refreshInterval = setInterval(refreshQueue, 1000);
+        refreshQueue(); // Immediate first refresh
+    });
 
 // Add the new scan function
 function scanFolderOnce() {
@@ -551,13 +547,17 @@ function stopMonitoring() {
 function updateMonitoringButtons() {
     const startBtn = document.getElementById('startMonitoringBtn');
     const stopBtn = document.getElementById('stopMonitoringBtn');
+    const scanBtn = document.getElementById('scanFolderOnceBtn');
     
     if (isMonitoring) {
         startBtn.disabled = true;
         stopBtn.disabled = false;
+        // Allow scanning even during monitoring
+        scanBtn.disabled = !isAuthenticated;
     } else {
         startBtn.disabled = !isAuthenticated;
         stopBtn.disabled = true;
+        scanBtn.disabled = !isAuthenticated;
     }
     
     updateStatusIndicator();
