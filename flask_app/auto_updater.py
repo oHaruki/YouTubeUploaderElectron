@@ -47,12 +47,26 @@ def get_current_version():
     Returns:
         str: Current version string or "0.0.0" if not found
     """
+    # Try to read from package.json first (more reliable source)
+    try:
+        package_path = 'package.json'
+        if os.path.exists(package_path):
+            with open(package_path, 'r') as f:
+                package_data = json.load(f)
+                package_version = package_data.get('version')
+                if package_version:
+                    logger.info(f"Read version from package.json: {package_version}")
+                    return package_version
+    except Exception as e:
+        logger.error(f"Error reading package.json: {e}")
+        # Continue to version.json if package.json fails
+    
     if not os.path.exists(VERSION_FILE):
         # Create initial version file if it doesn't exist
         initial_version = {
             "version": "1.0.0",
             "build_date": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "auto_update": True
+            "auto_update": False  # Changed: Default to disabled
         }
         
         with open(VERSION_FILE, 'w') as f:
@@ -76,15 +90,15 @@ def is_auto_update_enabled():
         bool: True if auto-update is enabled, False otherwise
     """
     if not os.path.exists(VERSION_FILE):
-        return True
+        return False  # Changed: Default to disabled
         
     try:
         with open(VERSION_FILE, 'r') as f:
             version_data = json.load(f)
-            return version_data.get("auto_update", True)
+            return version_data.get("auto_update", False)  # Changed: Default to disabled
     except Exception as e:
         logger.error(f"Error reading version file auto-update setting: {e}")
-        return True
+        return False  # Default to disabled
 
 def set_auto_update_enabled(enabled=True):
     """

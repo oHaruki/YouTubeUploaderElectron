@@ -848,12 +848,32 @@ def get_available_versions():
     
     try:
         # Fetch releases from GitHub
-        response = requests.get("https://api.github.com/repos/oHaruki/YouTubeUploaderElectron/releases", timeout=10)
+        repo_url = "https://api.github.com/repos/oHaruki/YouTubeAutoUploader/releases"
+        logger.info(f"Fetching available versions from: {repo_url}")
+        
+        response = requests.get(repo_url, timeout=10)
         response.raise_for_status()
         
         releases = response.json()
-        versions = []
+        logger.info(f"Found {len(releases)} releases from GitHub API")
         
+        if not releases:
+            # Fallback to provide at least the current version if no releases found
+            logger.warning("No releases found on GitHub, providing fallback version info")
+            current_version = auto_updater.get_current_version()
+            return jsonify({
+                'success': True,
+                'versions': [{
+                    'version': current_version,
+                    'name': f'Current Version {current_version}',
+                    'date': auto_updater.time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    'notes': 'No release notes available.',
+                    'id': 'current'
+                }],
+                'current_version': current_version
+            })
+        
+        versions = []
         for release in releases:
             versions.append({
                 'version': release.get('tag_name', '').lstrip('v'),
@@ -869,9 +889,10 @@ def get_available_versions():
             'current_version': auto_updater.get_current_version()
         })
     except Exception as e:
+        logger.error(f"Error fetching versions: {str(e)}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': f"Failed to fetch versions: {str(e)}"
         })
 
 @api_bp.route('/updates/install/<version_id>', methods=['POST'])
