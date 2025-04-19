@@ -846,49 +846,103 @@ def get_available_versions():
     import requests
     import auto_updater
     import time
+    import logging
+    
+    # Configure logger
+    logger = logging.getLogger('api_routes')
     
     try:
         # Use the correct repository URL
         repo_url = "https://api.github.com/repos/oHaruki/YouTubeUploaderElectron/releases"
         logger.info(f"Fetching available versions from: {repo_url}")
         
-        response = requests.get(repo_url, timeout=10)
-        response.raise_for_status()
+        # Get current version before making any requests
+        current_version = auto_updater.get_current_version()
         
+        response = requests.get(repo_url, timeout=10)
+        logger.info(f"GitHub API response status: {response.status_code}")
+        
+        if response.status_code != 200:
+            logger.error(f"GitHub API error: {response.text}")
+            # Even if the request fails, we'll still return the current version
+            versions = [{
+                'version': current_version,
+                'name': f'Current Version {current_version}',
+                'date': time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                'notes': 'This is your currently installed version.',
+                'id': 'current'
+            }]
+            
+            return jsonify({
+                'success': True,
+                'versions': versions,
+                'current_version': current_version
+            })
+            
         releases = response.json()
         logger.info(f"Found {len(releases)} releases from GitHub API")
         
+        # Keep track of whether we've added the current version
+        current_version_added = False
+        
         versions = []
         for release in releases:
-            versions.append({
-                'version': release.get('tag_name', '').lstrip('v'),
-                'name': release.get('name', '') or f"Version {release.get('tag_name', '').lstrip('v')}",
+            version_number = release.get('tag_name', '').lstrip('v')
+            
+            # Check if any assets exist
+            assets = release.get('assets', [])
+            asset_names = [asset.get('name', '') for asset in assets]
+            logger.info(f"Assets for version {version_number}: {asset_names}")
+            
+            # Add release to versions list
+            version_data = {
+                'version': version_number,
+                'name': release.get('name', '') or f"Version {version_number}",
                 'date': release.get('published_at', ''),
                 'notes': release.get('body', ''),
                 'id': str(release.get('id', ''))
-            })
+            }
+            versions.append(version_data)
+            
+            # Check if this is the current version
+            if version_number == current_version:
+                current_version_added = True
+                # Mark it as the current version
+                version_data['name'] = f"Current Version {version_number}"
         
-        # If no versions found, add current version as fallback
-        if not versions:
-            current_version = auto_updater.get_current_version()
+        # Always add the current version if it's not in the list
+        if not current_version_added:
             versions.append({
                 'version': current_version,
                 'name': f'Current Version {current_version}',
                 'date': time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                'notes': 'No release notes available.',
+                'notes': 'This is your currently installed version.',
                 'id': 'current'
             })
         
         return jsonify({
             'success': True,
             'versions': versions,
-            'current_version': auto_updater.get_current_version()
+            'current_version': current_version
         })
     except Exception as e:
         logger.error(f"Error fetching versions: {str(e)}")
+        
+        # Even on error, still return the current version
+        current_version = auto_updater.get_current_version()
+        versions = [{
+            'version': current_version,
+            'name': f'Current Version {current_version}',
+            'date': time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            'notes': 'This is your currently installed version.',
+            'id': 'current'
+        }]
+        
         return jsonify({
-            'success': False,
-            'error': f"Failed to fetch versions: {str(e)}"
+            'success': True,
+            'versions': versions,
+            'current_version': current_version,
+            'error': f"Failed to fetch other versions: {str(e)}"
         })
 
 @api_bp.route('/updates/install/<version_id>', methods=['POST'])
