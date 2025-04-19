@@ -278,13 +278,17 @@ def download_update(download_url):
         download_url (str): URL to download the update from
         
     Returns:
-        str: Path to the downloaded update file, or None if download failed
+        tuple: (Path to the downloaded file, file_type), or (None, None) if download failed
     """
     try:
         logger.info(f"Downloading update from {download_url}")
         
         temp_dir = tempfile.gettempdir()
-        zip_path = os.path.join(temp_dir, "youtube_auto_uploader_update.zip")
+        # Detect file type from URL
+        is_exe = download_url.lower().endswith('.exe')
+        file_path = os.path.join(temp_dir, 
+                                "youtube_auto_uploader_update.exe" if is_exe else 
+                                "youtube_auto_uploader_update.zip")
         
         # Download the file with a proper user agent
         headers = {
@@ -300,7 +304,7 @@ def download_update(download_url):
         logger.info(f"Download size: {total_size} bytes")
         
         # Download with chunking
-        with open(zip_path, 'wb') as f:
+        with open(file_path, 'wb') as f:
             downloaded = 0
             last_percent = 0
             for chunk in response.iter_content(chunk_size=8192):
@@ -316,25 +320,26 @@ def download_update(download_url):
                             last_percent = percent
         
         # Verify the downloaded file
-        if os.path.exists(zip_path) and os.path.getsize(zip_path) > 0:
-            logger.info(f"Update downloaded to {zip_path}")
-            return zip_path
+        if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+            logger.info(f"Update downloaded to {file_path}")
+            return file_path, "exe" if is_exe else "zip"
         else:
-            logger.error(f"Downloaded file is empty or missing: {zip_path}")
-            return None
+            logger.error(f"Downloaded file is empty or missing: {file_path}")
+            return None, None
             
     except Exception as e:
         logger.error(f"Error downloading update: {e}")
         logger.error(traceback.format_exc())
-        return None
+        return None, None
 
-def apply_update(zip_path, latest_version):
+def apply_update(file_path, latest_version, file_type="zip"):
     """
     Apply the downloaded update
     
     Args:
-        zip_path (str): Path to the downloaded update ZIP file
+        file_path (str): Path to the downloaded update file
         latest_version (str): Version string of the update
+        file_type (str): Type of update file ('zip' or 'exe')
         
     Returns:
         bool: True if update was successful, False otherwise
@@ -342,6 +347,28 @@ def apply_update(zip_path, latest_version):
     try:
         logger.info(f"Applying update to version {latest_version}")
         
+        # For EXE files, we need to execute the installer instead of extracting
+        if file_type == "exe":
+            logger.info(f"Detected EXE installer at {file_path}")
+            logger.info(f"Starting installer process")
+            
+            # Update version files before launching installer
+            update_version_file(latest_version)
+            
+            # Launch the installer
+            if os.path.exists(file_path):
+                # Use subprocess to start the installer
+                import subprocess
+                subprocess.Popen([file_path])
+                
+                # Return success - the installer will handle the rest
+                logger.info("Installer launched successfully. Application will restart after installation.")
+                return True
+            else:
+                logger.error(f"Installer file not found: {file_path}")
+                return False
+        
+        # For ZIP files, use the original extraction logic
         temp_dir = os.path.join(tempfile.gettempdir(), "youtube_auto_uploader_update")
         current_dir = os.path.dirname(os.path.abspath(__file__))
         
@@ -356,8 +383,8 @@ def apply_update(zip_path, latest_version):
         os.makedirs(temp_dir)
         
         # Extract the update
-        logger.info(f"Extracting update from {zip_path}")
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        logger.info(f"Extracting update from {file_path}")
+        with zipfile.ZipFile(file_path, 'r') as zip_ref:
             zip_ref.extractall(temp_dir)
         
         # Find the root directory in the extracted files
@@ -624,13 +651,13 @@ def run_update():
             return (False, None, "No updates available")
         
         logger.info(f"Update available: {latest_version}, downloading...")
-        zip_path = download_update(download_url)
-        if not zip_path:
+        file_path, file_type = download_update(download_url)
+        if not file_path:
             logger.error("Failed to download update")
             return (False, None, "Failed to download update")
         
         logger.info("Applying update...")
-        success = apply_update(zip_path, latest_version)
+        success = apply_update(file_path, latest_version, file_type)
         if not success:
             logger.error("Failed to apply update")
             return (False, None, "Failed to apply update")
