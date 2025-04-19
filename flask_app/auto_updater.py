@@ -47,87 +47,53 @@ UPDATE_EXCLUDE = [
 
 def get_current_version():
     """
-    Get the current installed version with improved handling of multiple version sources
+    Get the current installed version with package.json as the definitive source
     
     Returns:
         str: Current version string or "0.0.0" if not found
     """
-    # Dictionary to track versions from different sources
-    version_sources = {}
-    
-    # Try to read from package.json first
+    # Primary source: package.json
     try:
         package_path = 'package.json'
         if os.path.exists(package_path):
             with open(package_path, 'r') as f:
                 package_data = json.load(f)
                 package_version = package_data.get('version')
-                if package_version and package_version != "0.0.0":
-                    logger.info(f"Read version from package.json: {package_version}")
-                    version_sources['package.json'] = package_version
+                if package_version:
+                    logger.info(f"Using version from package.json: {package_version}")
+                    
+                    # Also update version.json to keep versions in sync
+                    try:
+                        if os.path.exists(VERSION_FILE):
+                            with open(VERSION_FILE, 'r') as f:
+                                version_data = json.load(f)
+                            
+                            version_data["version"] = package_version
+                            
+                            with open(VERSION_FILE, 'w') as f:
+                                json.dump(version_data, f, indent=4)
+                                
+                            logger.info(f"Updated version.json to match package.json: {package_version}")
+                    except Exception as e:
+                        logger.error(f"Error updating version.json: {e}")
+                    
+                    return package_version
     except Exception as e:
         logger.error(f"Error reading package.json: {e}")
     
-    # Try root version.json
+    # Fallback to version.json
     try:
         if os.path.exists(VERSION_FILE):
             with open(VERSION_FILE, 'r') as f:
                 version_data = json.load(f)
                 root_version = version_data.get("version")
                 if root_version:
-                    logger.info(f"Read version from root version.json: {root_version}")
-                    version_sources['root_version.json'] = root_version
+                    logger.info(f"Fallback to version.json: {root_version}")
+                    return root_version
     except Exception as e:
-        logger.error(f"Error reading root version.json: {e}")
+        logger.error(f"Error reading version.json: {e}")
     
-    # Try flask_app/version.json
-    flask_version_file = os.path.join('flask_app', 'version.json')
-    try:
-        if os.path.exists(flask_version_file):
-            with open(flask_version_file, 'r') as f:
-                version_data = json.load(f)
-                flask_version = version_data.get("version")
-                if flask_version:
-                    logger.info(f"Read version from flask_app/version.json: {flask_version}")
-                    version_sources['flask_version.json'] = flask_version
-    except Exception as e:
-        logger.error(f"Error reading flask_app/version.json: {e}")
-    
-    # Debug all found versions
-    logger.info(f"All found versions: {version_sources}")
-    
-    # Choose the highest version number
-    if version_sources:
-        # Convert to list of (source, version_str) tuples
-        versions_list = [(source, ver_str) for source, ver_str in version_sources.items()]
-        
-        # Sort by version (highest first)
-        try:
-            versions_list.sort(key=lambda x: version.parse(x[1]), reverse=True)
-            highest_source, highest_version = versions_list[0]
-            logger.info(f"Using highest version: {highest_version} from {highest_source}")
-            return highest_version
-        except Exception as e:
-            logger.error(f"Error parsing versions: {e}")
-            # If sorting fails, just take the first one
-            if versions_list:
-                return versions_list[0][1]
-    
-    # If no versions found or all parsing failed, create a new version file
-    logger.warning("No valid version found, creating default version.json")
-    initial_version = {
-        "version": "1.0.0",
-        "build_date": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "auto_update": True  # Changed to enabled by default
-    }
-    
-    try:
-        with open(VERSION_FILE, 'w') as f:
-            json.dump(initial_version, f, indent=4)
-    except Exception as e:
-        logger.error(f"Error creating version file: {e}")
-    
-    return "1.0.0"
+    return "0.0.0"  # Default version if no files found
 
 def is_auto_update_enabled():
     """
@@ -191,14 +157,23 @@ def set_auto_update_enabled(enabled=True):
     except Exception as e:
         logger.error(f"Error updating version file: {e}")
 
-def check_for_update():
+"""
+Modified check_for_update function to fix version mismatch
+Replace this function in your auto_updater.py
+"""
+
+def check_for_update(forced_current_version=None):
     """
     Check if a newer version is available on GitHub with improved error handling and debugging
     
+    Args:
+        forced_current_version (str, optional): Override the current version for comparison
+        
     Returns:
         tuple: (update_available, latest_version, download_url, release_notes)
     """
-    current_version = get_current_version()
+    # Use the forced version if provided, otherwise get from files
+    current_version = forced_current_version if forced_current_version else get_current_version()
     
     try:
         logger.info(f"Checking for updates (current version: {current_version})")
@@ -252,7 +227,7 @@ def check_for_update():
         assets = release_data.get("assets", [])
         logger.info(f"Release assets: {[asset.get('name') for asset in assets]}")
         
-        # Find the ZIP asset
+        # Find the ZIP or EXE asset
         for asset in assets:
             asset_name = asset.get("name", "")
             asset_url = asset.get("browser_download_url")
@@ -271,6 +246,7 @@ def check_for_update():
             return (False, latest_version, None, None)
         
         try:
+            # Compare using the exact version provided (fixes mismatch issue)
             is_newer = version.parse(latest_version) > version.parse(current_version)
             logger.info(f"Version comparison: {latest_version} > {current_version} = {is_newer}")
             
@@ -534,11 +510,20 @@ def get_all_versions():
         logger.info(f"Current version: {current_version}")
         
         # Get all releases
+        logger.info(f"Requesting all releases from: {GITHUB_ALL_RELEASES_URL}")
         response = requests.get(GITHUB_ALL_RELEASES_URL, headers=headers, timeout=15)
         
         if response.status_code != 200:
             logger.error(f"GitHub API error: {response.status_code} {response.text}")
-            return []
+            # Don't return an empty list - return at least the current version
+            return [{
+                'id': 'current',
+                'version': current_version,
+                'name': f'Current Version {current_version}',
+                'date': time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                'notes': 'This is your currently installed version.',
+                'is_current': True
+            }]
         
         releases = response.json()
         logger.info(f"Found {len(releases)} releases")
@@ -562,9 +547,14 @@ def get_all_versions():
                     download_url = asset.get("browser_download_url")
                     break
             
+            # If no compatible download found, just record the version info anyway
             if not download_url:
-                logger.warning(f"No download URL found for version {version_number}")
-                continue
+                logger.warning(f"No compatible download URL found for version {version_number}")
+                # Look for any asset to use as fallback
+                if release.get("assets"):
+                    download_url = release["assets"][0].get("browser_download_url")
+                else:
+                    download_url = release.get("html_url")  # Use GitHub page URL as fallback
             
             # Create version object
             version_obj = {
@@ -591,12 +581,29 @@ def get_all_versions():
                 "is_current": True
             })
         
+        # Sort by version number (latest first)
+        try:
+            versions.sort(key=lambda v: version.parse(v["version"]), reverse=True)
+        except Exception as e:
+            logger.error(f"Error sorting versions: {e}")
+            # Fall back to string sort
+            versions.sort(key=lambda v: v["version"], reverse=True)
+        
         return versions
         
     except Exception as e:
         logger.error(f"Error getting versions: {e}")
         logger.error(traceback.format_exc())
-        return []
+        
+        # Return at least the current version
+        return [{
+            'id': 'current',
+            'version': current_version,
+            'name': f'Current Version {current_version}',
+            'date': time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            'notes': 'This is your currently installed version.',
+            'is_current': True
+        }]
 
 def run_update():
     """

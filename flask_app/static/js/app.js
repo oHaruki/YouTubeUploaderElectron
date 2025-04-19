@@ -1290,4 +1290,48 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Retry button
     document.getElementById('retryUpdateBtn')?.addEventListener('click', checkForUpdates);
+    
+    // Version history tab
+    document.getElementById('versions-tab')?.addEventListener('shown.bs.tab', function() {
+        loadAvailableVersions();
+    });
 });
+
+// Version history tab fix - add this at the end of your app.js file
+(function() {
+    console.log("Setting up version history tab handlers");
+    
+    // Find all tab elements that might control the version history
+    const versionTabs = document.querySelectorAll('[data-bs-target="#versions-tab-pane"], #versions-tab');
+    
+    // Add click listeners to all potential tab controls
+    versionTabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+            console.log("Version tab clicked, loading versions...");
+            setTimeout(loadAvailableVersions, 100);
+        });
+    });
+    
+    // Also try the Bootstrap tab event
+    const allTabs = document.querySelectorAll('[data-bs-toggle="tab"]');
+    allTabs.forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function(event) {
+            console.log("Tab shown:", event.target.getAttribute('data-bs-target'));
+            if (event.target.getAttribute('data-bs-target') === "#versions-tab-pane" || 
+                event.target.id === "versions-tab") {
+                console.log("Version tab shown via Bootstrap event");
+                loadAvailableVersions();
+            }
+        });
+    });
+    
+    // Add a direct trigger button as fallback
+    const versionList = document.getElementById('versionList');
+    if (versionList) {
+        const loadButton = document.createElement('button');
+        loadButton.className = 'btn btn-sm btn-primary mb-3';
+        loadButton.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> Load Versions';
+        loadButton.onclick = loadAvailableVersions;
+        versionList.parentNode.insertBefore(loadButton, versionList);
+    }
+})(); // Self-executing function
