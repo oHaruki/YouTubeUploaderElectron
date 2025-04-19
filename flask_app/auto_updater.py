@@ -337,7 +337,7 @@ def apply_update(file_path, latest_version, file_type="zip"):
     Apply the downloaded update
     
     Args:
-        file_path (str): Path to the downloaded update file
+        file_path (str or tuple): Path to the downloaded update file or tuple with (path, type)
         latest_version (str): Version string of the update
         file_type (str): Type of update file ('zip' or 'exe')
         
@@ -346,6 +346,11 @@ def apply_update(file_path, latest_version, file_type="zip"):
     """
     try:
         logger.info(f"Applying update to version {latest_version}")
+        
+        # Extract file_path and file_type if a tuple was passed
+        if isinstance(file_path, tuple):
+            file_path, file_type = file_path
+            logger.info(f"Unpacked tuple: file_path={file_path}, file_type={file_type}")
         
         # For EXE files, we need to execute the installer instead of extracting
         if file_type == "exe":
@@ -368,7 +373,7 @@ def apply_update(file_path, latest_version, file_type="zip"):
                 logger.error(f"Installer file not found: {file_path}")
                 return False
         
-        # For ZIP files, use the original extraction logic
+        # For ZIP files, use the extraction logic
         temp_dir = os.path.join(tempfile.gettempdir(), "youtube_auto_uploader_update")
         current_dir = os.path.dirname(os.path.abspath(__file__))
         

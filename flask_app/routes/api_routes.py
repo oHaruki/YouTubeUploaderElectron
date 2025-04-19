@@ -765,14 +765,20 @@ def apply_update():
                 'error': 'No updates available'
             })
         
-        zip_path = auto_updater.download_update(download_url)
-        if not zip_path:
+        # This returns a tuple of (file_path, file_type)
+        download_result = auto_updater.download_update(download_url)
+        if not download_result:
             return jsonify({
                 'success': False,
                 'error': 'Failed to download update'
             })
         
-        success = auto_updater.apply_update(zip_path, latest_version)
+        file_path, file_type = download_result
+        logger.info(f"Downloaded update: {file_path} (type: {file_type})")
+        
+        # Pass both file_path and file_type to apply_update
+        # The fixed apply_update function can also handle a tuple if needed
+        success = auto_updater.apply_update(file_path, latest_version, file_type)
         if not success:
             return jsonify({
                 'success': False,
@@ -785,6 +791,8 @@ def apply_update():
             'require_restart': True
         })
     except Exception as e:
+        logger.error(f"Error in update process: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({
             'success': False,
             'error': str(e)
