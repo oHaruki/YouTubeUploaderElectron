@@ -1154,18 +1154,28 @@ function loadAvailableVersions() {
     fetch('/api/updates/versions')
         .then(response => response.json())
         .then(data => {
+            // Log the full response for debugging
+            console.log("Version check API response:", data);
+            
             if (data.success) {
                 const currentVersion = data.current_version;
+                console.log(`Current version: ${currentVersion}`);
                 
-                if (data.versions.length === 0) {
+                if (!data.versions || data.versions.length === 0) {
+                    console.log("No versions returned");
                     versionListEl.innerHTML = '<div class="alert alert-info">No versions available</div>';
                     return;
                 }
                 
+                console.log(`Received ${data.versions.length} versions`);
+                
+                // Build HTML for versions
                 let html = '<div class="list-group">';
                 data.versions.forEach(version => {
-                    const date = new Date(version.date).toLocaleDateString();
-                    const isCurrent = version.version === currentVersion;
+                    console.log(`Processing version: ${version.version}, ID: ${version.id}`);
+                    
+                    const date = version.date ? new Date(version.date).toLocaleDateString() : 'Unknown date';
+                    const isCurrent = version.is_current || version.version === currentVersion;
                     
                     html += `
                         <a href="#" class="list-group-item list-group-item-action ${isCurrent ? 'active' : ''}" 
@@ -1188,12 +1198,34 @@ function loadAvailableVersions() {
                 
                 versionListEl.innerHTML = html;
             } else {
-                versionListEl.innerHTML = `<div class="alert alert-danger">Failed to load versions: ${data.error}</div>`;
+                console.error("Version check failed:", data.error || "Unknown error");
+                
+                versionListEl.innerHTML = `
+                    <div class="alert alert-danger">
+                        <h5><i class="bi bi-exclamation-triangle me-2"></i>Error Loading Versions</h5>
+                        <p>${data.error || "Failed to load versions"}</p>
+                        <div class="mt-2">
+                            <button class="btn btn-sm btn-outline-danger" onclick="loadAvailableVersions()">
+                                <i class="bi bi-arrow-repeat me-1"></i> Retry
+                            </button>
+                        </div>
+                    </div>
+                `;
             }
         })
         .catch(error => {
             console.error('Error loading versions:', error);
-            versionListEl.innerHTML = '<div class="alert alert-danger">Error loading versions</div>';
+            versionListEl.innerHTML = `
+                <div class="alert alert-danger">
+                    <h5><i class="bi bi-exclamation-triangle me-2"></i>Connection Error</h5>
+                    <p>Failed to connect to the update server: ${error.message}</p>
+                    <div class="mt-2">
+                        <button class="btn btn-sm btn-outline-danger" onclick="loadAvailableVersions()">
+                            <i class="bi bi-arrow-repeat me-1"></i> Retry
+                        </button>
+                    </div>
+                </div>
+            `;
         });
 }
 
