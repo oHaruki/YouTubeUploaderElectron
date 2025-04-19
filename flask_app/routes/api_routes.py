@@ -704,12 +704,20 @@ def api_select_project():
     
 @api_bp.route('/updates/check', methods=['GET'])
 def check_for_updates():
-    """Check for available updates"""
+    """Check for available updates with robust error handling"""
     import auto_updater
     
     try:
+        # Add detailed logging
+        logger = logging.getLogger('api')
+        logger.info("API: Checking for updates")
+        
+        # Add timeout and better error handling
         update_available, latest_version, download_url, release_notes = auto_updater.check_for_update()
         current_version = auto_updater.get_current_version()
+        
+        # Log the results
+        logger.info(f"API: Update check results - current={current_version}, latest={latest_version}, available={update_available}")
         
         return jsonify({
             'success': True,
@@ -720,9 +728,14 @@ def check_for_updates():
             'auto_update_enabled': auto_updater.is_auto_update_enabled()
         })
     except Exception as e:
+        # Log the full error with traceback
+        logger = logging.getLogger('api')
+        logger.error(f"API: Error checking for updates: {str(e)}")
+        logger.error(traceback.format_exc())
+        
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': f"Error checking for updates: {str(e)}"
         })
 
 @api_bp.route('/updates/apply', methods=['POST'])
@@ -842,106 +855,56 @@ def api_add_project():
 # Version selection routes
 @api_bp.route('/updates/versions', methods=['GET'])
 def get_available_versions():
-    """Get list of all available versions with minimal processing"""
+    """Get list of all available versions with improved error handling"""
     import requests
     import auto_updater
     import time
     import json
     import os
+    import traceback
+    import logging
     
-    # Get current version info
+    # Set up logging
+    logger = logging.getLogger('api')
+    logger.info("API: Getting available versions")
+    
+    # Get current version info with better handling
     current_version = auto_updater.get_current_version()
-    
-    # Direct GitHub API request without complex processing
-    repo_owner = "oHaruki"
-    repo_name = "YouTubeUploaderElectron"
-    api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases"
-    
-    # Print to console for immediate visibility
-    print(f"[VERSION CHECK] Fetching releases from: {api_url}")
-    print(f"[VERSION CHECK] Current version: {current_version}")
+    logger.info(f"API: Current version: {current_version}")
     
     try:
-        # Basic headers for GitHub API
-        headers = {
-            'User-Agent': 'YouTube-Auto-Uploader',
-            'Accept': 'application/vnd.github.v3+json'
-        }
+        # Use the new get_all_versions function from auto_updater
+        versions = auto_updater.get_all_versions()
         
-        # Make the request directly
-        response = requests.get(api_url, headers=headers, timeout=10)
-        print(f"[VERSION CHECK] GitHub API response: status={response.status_code}")
-        
-        if response.status_code != 200:
-            print(f"[VERSION CHECK] Error response: {response.text}")
-            # Return a basic version with the error
+        if versions:
+            logger.info(f"API: Successfully retrieved {len(versions)} versions")
             return jsonify({
-                'success': False,
-                'error': f"GitHub API error: {response.status_code}",
-                'current_version': current_version,
+                'success': True,
+                'versions': versions,
+                'current_version': current_version
+            })
+        else:
+            # Fallback to a basic response if no versions were found
+            logger.warning("API: No versions found, returning basic response")
+            return jsonify({
+                'success': True,
                 'versions': [{
                     'version': current_version,
                     'name': f'Current Version {current_version}',
                     'date': time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    'id': 'current'
-                }]
+                    'notes': 'This is your currently installed version.',
+                    'id': 'current',
+                    'is_current': True
+                }],
+                'current_version': current_version
             })
-        
-        # Get the raw releases list
-        releases = response.json()
-        print(f"[VERSION CHECK] Found {len(releases)} releases")
-        
-        # Create a simple versions list with minimal processing
-        versions = []
-        for release in releases:
-            tag_name = release.get('tag_name', '')
-            version_number = tag_name.lstrip('v') if tag_name else ''
-            print(f"[VERSION CHECK] Processing release: tag={tag_name}, name={release.get('name')}")
             
-            # Get assets info
-            assets = release.get('assets', [])
-            asset_names = [asset.get('name', '') for asset in assets]
-            print(f"[VERSION CHECK] Assets: {asset_names}")
-            
-            # Create a simple version object
-            version_data = {
-                'version': version_number,
-                'name': release.get('name') or f"Version {version_number}",
-                'date': release.get('published_at', ''),
-                'notes': release.get('body', ''),
-                'id': str(release.get('id', '')),
-                'is_current': version_number == current_version
-            }
-            
-            versions.append(version_data)
-        
-        # Always include current version if not already included
-        if not any(v.get('is_current') for v in versions):
-            print(f"[VERSION CHECK] Adding current version {current_version} to list")
-            versions.append({
-                'version': current_version,
-                'name': f'Current Version {current_version}',
-                'date': time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                'notes': 'This is your currently installed version.',
-                'id': 'current',
-                'is_current': True
-            })
-        
-        print(f"[VERSION CHECK] Returning {len(versions)} versions")
-        
-        # Return simple response structure
-        return jsonify({
-            'success': True,
-            'versions': versions,
-            'current_version': current_version
-        })
-        
     except Exception as e:
-        import traceback
-        print(f"[VERSION CHECK] Error: {str(e)}")
-        print(traceback.format_exc())
+        # Log the full error with traceback
+        logger.error(f"API: Error getting versions: {str(e)}")
+        logger.error(traceback.format_exc())
         
-        # Return basic response with error info
+        # Return a basic version with error information
         return jsonify({
             'success': False,
             'error': str(e),
@@ -951,8 +914,124 @@ def get_available_versions():
                 'name': f'Current Version {current_version}',
                 'date': time.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 'notes': 'This is your currently installed version.',
-                'id': 'current'
+                'id': 'current',
+                'is_current': True
             }]
+        })
+
+
+@api_bp.route('/updates/debug', methods=['GET'])
+def debug_versions():
+    """Debug endpoint to get detailed version information"""
+    import auto_updater
+    import requests
+    import os
+    import glob
+    import json
+    import traceback
+    import logging
+    
+    # Set up logging
+    logger = logging.getLogger('api')
+    logger.info("API: Debug versions endpoint called")
+    
+    debug_info = {
+        'versions': {},
+        'github': {},
+        'files': {},
+        'errors': []
+    }
+    
+    # Get current version from different sources
+    try:
+        # Check main version.json
+        if os.path.exists('version.json'):
+            with open('version.json', 'r') as f:
+                version_data = json.load(f)
+                debug_info['versions']['main_version_json'] = version_data
+        else:
+            debug_info['errors'].append('Main version.json not found')
+        
+        # Check flask_app/version.json
+        flask_version = os.path.join('flask_app', 'version.json')
+        if os.path.exists(flask_version):
+            with open(flask_version, 'r') as f:
+                version_data = json.load(f)
+                debug_info['versions']['flask_version_json'] = version_data
+        else:
+            debug_info['errors'].append('flask_app/version.json not found')
+        
+        # Check package.json
+        if os.path.exists('package.json'):
+            with open('package.json', 'r') as f:
+                package_data = json.load(f)
+                debug_info['versions']['package_json'] = {
+                    'version': package_data.get('version'),
+                    'name': package_data.get('name')
+                }
+        else:
+            debug_info['errors'].append('package.json not found')
+        
+        # Get current version from auto_updater
+        debug_info['versions']['current_version'] = auto_updater.get_current_version()
+        debug_info['versions']['auto_update_enabled'] = auto_updater.is_auto_update_enabled()
+        
+        # Try GitHub API
+        try:
+            # Set up proper headers for GitHub API
+            headers = {
+                'User-Agent': 'YT-Auto-Uploader-App',
+                'Accept': 'application/vnd.github.v3+json'
+            }
+            
+            # Get latest release
+            response = requests.get(auto_updater.GITHUB_API_URL, headers=headers, timeout=15)
+            debug_info['github']['latest_release_status'] = response.status_code
+            
+            if response.status_code == 200:
+                debug_info['github']['latest_release'] = response.json()
+            else:
+                debug_info['github']['latest_release_error'] = response.text
+            
+            # Get all releases
+            response = requests.get(auto_updater.GITHUB_ALL_RELEASES_URL, headers=headers, timeout=15)
+            debug_info['github']['all_releases_status'] = response.status_code
+            
+            if response.status_code == 200:
+                releases = response.json()
+                debug_info['github']['release_count'] = len(releases)
+                if releases:
+                    # Just include basic info to avoid huge response
+                    debug_info['github']['releases'] = [{
+                        'id': r.get('id'),
+                        'tag_name': r.get('tag_name'),
+                        'name': r.get('name'),
+                        'created_at': r.get('created_at'),
+                        'asset_count': len(r.get('assets', []))
+                    } for r in releases[:5]]  # Limit to 5 releases
+            else:
+                debug_info['github']['all_releases_error'] = response.text
+                
+        except Exception as e:
+            debug_info['errors'].append(f'GitHub API error: {str(e)}')
+        
+        # Check for version files
+        version_files = glob.glob('*.json') + glob.glob('flask_app/*.json')
+        debug_info['files']['version_files'] = version_files
+        
+        return jsonify({
+            'success': True,
+            'debug_info': debug_info
+        })
+        
+    except Exception as e:
+        logger.error(f"API: Error in debug endpoint: {str(e)}")
+        logger.error(traceback.format_exc())
+        
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
         })
 
 @api_bp.route('/updates/install/<version_id>', methods=['POST'])
