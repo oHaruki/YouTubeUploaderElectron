@@ -227,15 +227,15 @@ def check_for_update(forced_current_version=None):
         assets = release_data.get("assets", [])
         logger.info(f"Release assets: {[asset.get('name') for asset in assets]}")
         
-        # Find the ZIP or EXE asset
+        # Look specifically for ZIP assets, not EXE
         for asset in assets:
             asset_name = asset.get("name", "")
             asset_url = asset.get("browser_download_url")
             logger.info(f"Checking asset: {asset_name}, URL: {asset_url}")
             
-            if asset_name.endswith((".zip", ".exe")):
+            if asset_name.endswith(".zip") and "win-unpacked" in asset_name:
                 download_url = asset_url
-                logger.info(f"Found download URL: {download_url}")
+                logger.info(f"Found direct update ZIP: {download_url}")
                 break
         
         release_notes = release_data.get("body", "No release notes available.")
@@ -333,170 +333,73 @@ def download_update(download_url):
         return None, None
 
 def apply_update(file_path, latest_version, file_type="zip"):
-    """
-    Apply the downloaded update
-    
-    Args:
-        file_path (str or tuple): Path to the downloaded update file or tuple with (path, type)
-        latest_version (str): Version string of the update
-        file_type (str): Type of update file ('zip' or 'exe')
-        
-    Returns:
-        bool: True if update was successful, False otherwise
-    """
+    """Apply the downloaded update"""
     try:
         logger.info(f"Applying update to version {latest_version}")
         
-        # Extract file_path and file_type if a tuple was passed
+        # Handle tuple case
         if isinstance(file_path, tuple):
             file_path, file_type = file_path
-            logger.info(f"Unpacked tuple: file_path={file_path}, file_type={file_type}")
         
-        # For EXE files, we need to execute the installer instead of extracting
-        if file_type == "exe":
-            logger.info(f"Detected EXE installer at {file_path}")
-            logger.info(f"Starting installer process")
-            
-            # Update version files before launching installer
-            update_version_file(latest_version)
-            
-            # Launch the installer
-            if os.path.exists(file_path):
-                # Use subprocess to start the installer
-                import subprocess
-                subprocess.Popen([file_path])
-                
-                # Return success - the installer will handle the rest
-                logger.info("Installer launched successfully. Application will restart after installation.")
-                return True
-            else:
-                logger.error(f"Installer file not found: {file_path}")
-                return False
+        # We only handle ZIP updates in this approach
+        if file_type != "zip":
+            logger.error(f"Unsupported update type: {file_type}")
+            return False
         
-        # For ZIP files, use the extraction logic
+        # Ensure app can write to its own directory
         temp_dir = os.path.join(tempfile.gettempdir(), "youtube_auto_uploader_update")
-        current_dir = os.path.dirname(os.path.abspath(__file__))
+        app_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         
-        # Log directories for debugging
-        logger.info(f"Temp directory: {temp_dir}")
-        logger.info(f"Current directory: {current_dir}")
+        logger.info(f"Application directory: {app_dir}")
+        if not os.access(app_dir, os.W_OK):
+            logger.error(f"No write access to application directory: {app_dir}")
+            return False
         
-        # Clear previous temp directory if it exists
+        # Clear and create temp directory
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
-        
         os.makedirs(temp_dir)
         
-        # Extract the update
+        # Extract the update to temp directory
         logger.info(f"Extracting update from {file_path}")
         with zipfile.ZipFile(file_path, 'r') as zip_ref:
             zip_ref.extractall(temp_dir)
         
-        # Find the root directory in the extracted files
-        extracted_dirs = [d for d in os.listdir(temp_dir) if os.path.isdir(os.path.join(temp_dir, d))]
-        logger.info(f"Extracted directories: {extracted_dirs}")
+        # Find the extracted directory
+        extract_root = temp_dir
+        subdirs = [d for d in os.listdir(temp_dir) if os.path.isdir(os.path.join(temp_dir, d))]
+        if subdirs:
+            # If there's a single subdirectory, use that as the root
+            if len(subdirs) == 1:
+                extract_root = os.path.join(temp_dir, subdirs[0])
         
-        if extracted_dirs:
-            extract_root = os.path.join(temp_dir, extracted_dirs[0])
-        else:
-            extract_root = temp_dir
-        
-        logger.info(f"Extract root: {extract_root}")
-        
-        # List files that will be updated
-        logger.info("Files to be updated:")
-        for item in os.listdir(extract_root):
-            if item not in UPDATE_EXCLUDE:
-                logger.info(f" - {item}")
-        
-        # Copy the update files to the current directory
-        for item in os.listdir(extract_root):
-            source = os.path.join(extract_root, item)
-            destination = os.path.join(current_dir, item)
+        # Create update script that will run after app closes
+        script_path = os.path.join(temp_dir, "update_script.bat")
+        with open(script_path, "w") as f:
+            f.write("@echo off\n")
+            f.write("echo Updating YouTube Auto Uploader...\n")
+            f.write(f"timeout /t 2 /nobreak > nul\n")  # Wait for app to close
             
-            # Skip excluded items
-            if item in UPDATE_EXCLUDE:
-                logger.info(f"Skipping excluded item: {item}")
-                continue
-                
-            # Copy files and directories
-            if os.path.isdir(source):
-                if os.path.exists(destination):
-                    # Update existing directory
-                    logger.info(f"Updating directory: {item}")
-                    for root, dirs, files in os.walk(source):
-                        # Get the relative path from source root
-                        rel_path = os.path.relpath(root, source)
-                        
-                        for file in files:
-                            # Skip updating files in excluded directories
-                            if any(excluded in os.path.join(rel_path, file) for excluded in UPDATE_EXCLUDE):
-                                continue
-                                
-                            src_file = os.path.join(root, file)
-                            dst_file = os.path.join(destination, rel_path, file)
-                            
-                            # Ensure destination directory exists
-                            dst_dir = os.path.dirname(dst_file)
-                            if not os.path.exists(dst_dir):
-                                os.makedirs(dst_dir)
-                                
-                            # Copy the file
-                            logger.info(f"Copying file: {rel_path}/{file}")
-                            shutil.copy2(src_file, dst_file)
-                else:
-                    # Copy new directory
-                    logger.info(f"Adding new directory: {item}")
-                    shutil.copytree(source, destination, ignore=shutil.ignore_patterns(*UPDATE_EXCLUDE))
-            else:
-                # Copy file
-                logger.info(f"Copying file: {item}")
-                shutil.copy2(source, destination)
-        
-        # Update version file
-        logger.info(f"Updating version file to {latest_version}")
-        update_version_file(latest_version)
-        
-        # Update other version files for consistency
-        try:
-            # Update package.json if it exists
-            if os.path.exists('package.json'):
-                with open('package.json', 'r') as f:
-                    package_data = json.load(f)
-                    
-                package_data['version'] = latest_version
-                
-                with open('package.json', 'w') as f:
-                    json.dump(package_data, f, indent=2)
-                    
-                logger.info(f"Updated package.json version to {latest_version}")
+            # Copy all files excluding specific ones
+            f.write(f'robocopy "{extract_root}" "{app_dir}" /E /PURGE /XF update_script.bat config.json version.json\n')
             
-            # Update flask_app/version.json if it exists
-            flask_version_file = os.path.join('flask_app', 'version.json')
-            if os.path.exists(flask_version_file):
-                with open(flask_version_file, 'r') as f:
-                    flask_version_data = json.load(f)
-                    
-                flask_version_data['version'] = latest_version
-                flask_version_data['build_date'] = time.strftime("%Y-%m-%d %H:%M:%S")
-                
-                with open(flask_version_file, 'w') as f:
-                    json.dump(flask_version_data, f, indent=4)
-                    
-                logger.info(f"Updated flask_app/version.json to {latest_version}")
-        except Exception as e:
-            logger.error(f"Error updating additional version files: {e}")
+            # Update version file but preserve settings
+            f.write(f'echo {{\"version\": \"{latest_version}\", \"build_date\": \"{time.strftime("%Y-%m-%d %H:%M:%S")}\", \"auto_update\": true}} > "{app_dir}\\version.json"\n')
+            
+            # Start the app again
+            f.write(f'start "" "{app_dir}\\YouTube Auto Uploader.exe"\n')
+            f.write("exit\n")
         
-        # Clean up
-        try:
-            os.remove(zip_path)
-            shutil.rmtree(temp_dir)
-            logger.info("Update cleanup completed")
-        except Exception as e:
-            logger.warning(f"Error during cleanup: {e}")
+        # Launch the update script and exit the application
+        logger.info("Launching update script and exiting application")
+        subprocess.Popen(["cmd", "/c", script_path], 
+                         creationflags=subprocess.CREATE_NEW_CONSOLE, 
+                         start_new_session=True)
         
-        logger.info("Update applied successfully")
-        return True
+        # Signal to main app that it should exit
+        # return a special signal that tells the app to exit
+        return "EXIT_FOR_UPDATE"
+    
     except Exception as e:
         logger.error(f"Error applying update: {e}")
         logger.error(traceback.format_exc())

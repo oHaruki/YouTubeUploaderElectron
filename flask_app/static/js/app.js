@@ -1058,13 +1058,34 @@ function applyUpdate() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Show restart needed message
-            showToast('Success', 'Update installed successfully! Restarting application...', 'success');
-            
-            // Restart the application
-            setTimeout(() => {
-                restartApplication();
-            }, 3000);
+            if (data.exit_for_update) {
+                // Show message that app will restart 
+                showToast('Success', 'Update in progress. The application will restart shortly...', 'success');
+                
+                // Show restart screen
+                document.body.innerHTML = `
+                    <div class="container text-center" style="margin-top: 100px;">
+                        <h2>Applying Update</h2>
+                        <div class="spinner-border text-primary mt-4" role="status" style="width: 4rem; height: 4rem;">
+                            <span class="visually-hidden">Updating...</span>
+                        </div>
+                        <p class="lead mt-4">Please wait while the application updates and restarts...</p>
+                    </div>
+                `;
+                
+                // If we're in Electron, trigger app exit
+                if (window.electron) {
+                    setTimeout(() => {
+                        window.electron.exitForUpdate();
+                    }, 2000);
+                }
+            } else {
+                // Handle normal restart
+                showToast('Success', 'Update installed successfully! Restarting application...', 'success');
+                setTimeout(() => {
+                    restartApplication();
+                }, 3000);
+            }
         } else {
             // Show error
             updateNowBtn.innerHTML = originalBtnText;

@@ -482,6 +482,12 @@ ipcMain.handle('restart-app', () => {
   app.exit(0);
 });
 
+ipcMain.handle('exit-for-update', () => {
+  log.info('Exiting application for update...');
+  quitting = true;
+  app.exit(0);
+});
+
 // Add update-related IPC handlers
 ipcMain.handle('check-for-updates', () => {
   return autoUpdater.checkForUpdates();

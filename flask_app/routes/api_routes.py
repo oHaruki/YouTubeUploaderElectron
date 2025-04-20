@@ -765,7 +765,6 @@ def apply_update():
                 'error': 'No updates available'
             })
         
-        # This returns a tuple of (file_path, file_type)
         download_result = auto_updater.download_update(download_url)
         if not download_result:
             return jsonify({
@@ -773,26 +772,27 @@ def apply_update():
                 'error': 'Failed to download update'
             })
         
-        file_path, file_type = download_result
-        logger.info(f"Downloaded update: {file_path} (type: {file_type})")
+        result = auto_updater.apply_update(download_result, latest_version)
         
-        # Pass both file_path and file_type to apply_update
-        # The fixed apply_update function can also handle a tuple if needed
-        success = auto_updater.apply_update(file_path, latest_version, file_type)
-        if not success:
+        # Special case for "EXIT_FOR_UPDATE" signal
+        if result == "EXIT_FOR_UPDATE":
+            return jsonify({
+                'success': True,
+                'message': f'Update to version {latest_version} in progress',
+                'exit_for_update': True
+            })
+        elif result:
+            return jsonify({
+                'success': True,
+                'message': f'Updated to version {latest_version}',
+                'require_restart': True
+            })
+        else:
             return jsonify({
                 'success': False,
                 'error': 'Failed to apply update'
             })
-        
-        return jsonify({
-            'success': True,
-            'message': f'Updated to version {latest_version}',
-            'require_restart': True
-        })
     except Exception as e:
-        logger.error(f"Error in update process: {str(e)}")
-        logger.error(traceback.format_exc())
         return jsonify({
             'success': False,
             'error': str(e)
