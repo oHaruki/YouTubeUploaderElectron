@@ -16,6 +16,61 @@ Menu.setApplicationMenu(null);
 log.transports.file.level = 'info';
 log.info('Application starting...');
 
+// Create a version.json file in the Flask app directory
+function syncVersionToFlask() {
+  try {
+    // Get app version from package.json
+    const version = app.getVersion();
+    log.info(`Current application version: ${version}`);
+    
+    // Create the file path
+    const versionPath = path.join(
+      app.isPackaged ? process.resourcesPath : app.getAppPath(), 
+      'flask_app', 
+      'version.json'
+    );
+    
+    // Read existing file if it exists
+    let versionData = {
+      version: version,
+      build_date: new Date().toISOString().split('T')[0] + ' ' + new Date().toTimeString().split(' ')[0],
+      auto_update: true
+    };
+    
+    try {
+      if (fs.existsSync(versionPath)) {
+        const existingData = JSON.parse(fs.readFileSync(versionPath, 'utf8'));
+        // Keep auto_update setting but update version
+        versionData.auto_update = existingData.auto_update;
+      }
+    } catch (e) {
+      log.error('Error reading existing version file:', e);
+    }
+    
+    // Write the updated version file
+    fs.writeFileSync(versionPath, JSON.stringify(versionData, null, 4));
+    log.info(`Synchronized version file at ${versionPath} with version ${version}`);
+    
+    // Also create a root version.json for the auto_updater.py to find
+    const rootVersionPath = path.join(
+      app.isPackaged ? process.resourcesPath : app.getAppPath(),
+      'version.json'
+    );
+    
+    try {
+      fs.writeFileSync(rootVersionPath, JSON.stringify(versionData, null, 4));
+      log.info(`Created root version file at ${rootVersionPath}`);
+    } catch (e) {
+      log.error('Error creating root version file:', e);
+    }
+    
+    return true;
+  } catch (e) {
+    log.error('Error syncing version to file:', e);
+    return false;
+  }
+}
+
 // Configure auto-updater
 autoUpdater.logger = log;
 autoUpdater.autoDownload = false;
@@ -507,6 +562,7 @@ ipcMain.handle('install-update', () => {
 app.whenReady().then(async () => {
   try {
     log.info('App ready, initializing...');
+    const { dirs, pathsFile } = initializeAppDirectories();
     
     // Set working directory to resources path when packaged
     if (app.isPackaged) {
@@ -517,6 +573,9 @@ app.whenReady().then(async () => {
         log.error('Failed to change working directory:', error);
       }
     }
+    
+    // Sync version.json for Flask
+    syncVersionToFlask();
     
     // Create system tray
     createTray();
@@ -562,3 +621,89 @@ app.on('before-quit', () => {
   quitting = true;
   stopFlaskServer();
 });
+
+// Get application directories for different environments
+function getAppDirectories() {
+  const appDirs = {
+    // Main application directory
+    appDir: app.isPackaged ? process.resourcesPath : app.getAppPath(),
+    
+    // Electron-specific directories
+    userData: app.getPath('userData'),
+    appData: app.getPath('appData'),
+    logs: app.getPath('logs'),
+    temp: app.getPath('temp'),
+    
+    // App-specific directories
+    config: path.join(app.getPath('userData'), 'config'),
+    data: path.join(app.getPath('userData'), 'data')
+  };
+  
+  // Create directories that don't exist
+  Object.values(appDirs).forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+        log.info(`Created directory: ${dir}`);
+      } catch (error) {
+        log.error(`Failed to create directory ${dir}: ${error}`);
+      }
+    }
+  });
+  
+  // Log all directories for debugging
+  log.info('Application directories:');
+  Object.entries(appDirs).forEach(([key, value]) => {
+    log.info(`  ${key}: ${value}`);
+  });
+  
+  return appDirs;
+}
+
+// Save application paths to a file that update scripts can read
+function saveAppPaths() {
+  try {
+    const dirs = getAppDirectories();
+    const appPathsFile = path.join(dirs.temp, 'app_paths.json');
+    
+    const pathData = {
+      executable: app.getPath('exe'),
+      appRoot: app.isPackaged ? path.dirname(app.getPath('exe')) : app.getAppPath(),
+      resourcesPath: process.resourcesPath,
+      userData: dirs.userData,
+      appData: dirs.appData,
+      isPackaged: app.isPackaged
+    };
+    
+    fs.writeFileSync(appPathsFile, JSON.stringify(pathData, null, 2));
+    log.info(`Saved application paths to ${appPathsFile}`);
+    
+    return appPathsFile;
+  } catch (error) {
+    log.error(`Error saving app paths: ${error}`);
+    return null;
+  }
+}
+
+// Call this during app initialization
+function initializeAppDirectories() {
+  const dirs = getAppDirectories();
+  const pathsFile = saveAppPaths();
+  
+  // Create a version file in the userData directory for easier syncing
+  try {
+    const versionFile = path.join(dirs.userData, 'version.json');
+    const versionData = {
+      version: app.getVersion(),
+      buildDate: new Date().toISOString(),
+      autoUpdate: true
+    };
+    
+    fs.writeFileSync(versionFile, JSON.stringify(versionData, null, 2));
+    log.info(`Saved version information to ${versionFile}`);
+  } catch (error) {
+    log.error(`Error saving version file: ${error}`);
+  }
+  
+  return { dirs, pathsFile };
+}

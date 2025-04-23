@@ -1,6 +1,6 @@
 {
   "name": "youtube-auto-uploader",
-  "version": "0.0.0",
+  "version": "0.2.0",
   "description": "Desktop application for automatically uploading videos to YouTube",
   "main": "electron/main.js",
   "scripts": {

@@ -1064,42 +1064,70 @@ def install_specific_version(version_id):
     """Install a specific version"""
     import requests
     import auto_updater
+    import logging
+    
+    logger = logging.getLogger('api')
     
     try:
         # Fetch specific release
-        response = requests.get(f"https://api.github.com/repos/oHaruki/YouTubeUploaderElectron/releases/{version_id}", timeout=10)
+        logger.info(f"Fetching release information for ID: {version_id}")
+        
+        response = requests.get(f"https://api.github.com/repos/oHaruki/YouTubeUploaderElectron/releases/{version_id}", 
+                                headers={
+                                    'User-Agent': 'YT-Auto-Uploader-App',
+                                    'Accept': 'application/vnd.github.v3+json'
+                                },
+                                timeout=10)
         response.raise_for_status()
         
         release = response.json()
         download_url = None
         
-        # Find ZIP asset
-        for asset in release.get("assets", []):
-            if asset.get("name", "").endswith((".zip", ".exe")):
+        # Find the appropriate ZIP file (prioritize win-unpacked ZIP)
+        assets = release.get("assets", [])
+        logger.info(f"Available assets: {[asset.get('name', '') for asset in assets]}")
+        
+        # First look for ZIPs with "win" in the name
+        for asset in assets:
+            asset_name = asset.get("name", "").lower()
+            if asset_name.endswith(".zip") and "win" in asset_name:
                 download_url = asset.get("browser_download_url")
+                logger.info(f"Found win ZIP file: {asset_name}")
                 break
         
         if not download_url:
+            logger.warning(f"No suitable win-ZIP file found in release {version_id}")
             return jsonify({
                 'success': False,
-                'error': 'No download available for this version'
+                'error': 'No suitable ZIP file found in this release. Please add a win-ZIP file to the release.'
             })
         
         version = release.get('tag_name', '').lstrip('v')
+        logger.info(f"Attempting to download and install version {version} from {download_url}")
         
         # Download and apply
         zip_path = auto_updater.download_update(download_url)
-        if not zip_path:
+        if not zip_path or zip_path[0] is None:
+            logger.error("Download failed or returned an invalid file")
             return jsonify({
                 'success': False,
-                'error': 'Failed to download update'
+                'error': 'Failed to download update file'
             })
         
         success = auto_updater.apply_update(zip_path, version)
         if not success:
+            logger.error("Failed to apply update")
             return jsonify({
                 'success': False,
                 'error': 'Failed to apply update'
+            })
+        
+        if success == "EXIT_FOR_UPDATE":
+            logger.info("Update ready for installation after app restart")
+            return jsonify({
+                'success': True,
+                'message': f'Update to version {version} in progress',
+                'exit_for_update': True
             })
         
         return jsonify({
@@ -1108,7 +1136,8 @@ def install_specific_version(version_id):
             'require_restart': True
         })
     except Exception as e:
+        logger.error(f"Error installing version {version_id}: {str(e)}", exc_info=True)
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': f'Update error: {str(e)}'
         })

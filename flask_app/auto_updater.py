@@ -47,53 +47,131 @@ UPDATE_EXCLUDE = [
 
 def get_current_version():
     """
-    Get the current installed version with package.json as the definitive source
+    Get the current installed version with fallbacks for both development and production environments
     
     Returns:
         str: Current version string or "0.0.0" if not found
     """
-    # Primary source: package.json
+    version_sources = []
+    
+    # First priority: Try to get version from package.json (works in development)
     try:
-        package_path = 'package.json'
-        if os.path.exists(package_path):
-            with open(package_path, 'r') as f:
-                package_data = json.load(f)
-                package_version = package_data.get('version')
-                if package_version:
-                    logger.info(f"Using version from package.json: {package_version}")
-                    
-                    # Also update version.json to keep versions in sync
-                    try:
-                        if os.path.exists(VERSION_FILE):
-                            with open(VERSION_FILE, 'r') as f:
-                                version_data = json.load(f)
-                            
-                            version_data["version"] = package_version
-                            
-                            with open(VERSION_FILE, 'w') as f:
-                                json.dump(version_data, f, indent=4)
-                                
-                            logger.info(f"Updated version.json to match package.json: {package_version}")
-                    except Exception as e:
-                        logger.error(f"Error updating version.json: {e}")
-                    
-                    return package_version
+        # Try several possible locations for package.json
+        potential_paths = [
+            'package.json',                             # Current directory
+            os.path.join('..', 'package.json'),         # Parent directory 
+            os.path.join(os.path.dirname(__file__), 'package.json'),  # Script directory
+            os.path.join(os.path.dirname(__file__), '..', 'package.json')  # Parent of script directory
+        ]
+        
+        for package_path in potential_paths:
+            if os.path.exists(package_path):
+                logger.info(f"Found package.json at: {package_path}")
+                with open(package_path, 'r') as f:
+                    package_data = json.load(f)
+                    package_version = package_data.get('version')
+                    if package_version:
+                        logger.info(f"Using version from package.json: {package_version}")
+                        version_sources.append(('package.json', package_version))
+                        
+                        # Update version.json files if in development mode
+                        if package_path == 'package.json' or package_path == os.path.join('..', 'package.json'):
+                            try:
+                                sync_version_files(package_version)
+                            except Exception as e:
+                                logger.error(f"Error syncing version files: {e}")
+                        
+                        break
     except Exception as e:
         logger.error(f"Error reading package.json: {e}")
     
-    # Fallback to version.json
+    # Second priority: Try version.json in various locations
+    try:
+        version_files = [
+            VERSION_FILE,                             # Default location
+            os.path.join('flask_app', 'version.json'),  # Flask app directory
+            os.path.join(os.path.dirname(__file__), 'version.json'),  # Script directory
+            os.path.join(os.path.dirname(__file__), '..', 'version.json'),  # Parent directory
+            os.path.join(os.path.dirname(sys.executable), 'version.json')  # Executable directory
+        ]
+        
+        for ver_file in version_files:
+            if os.path.exists(ver_file):
+                logger.info(f"Found version.json at: {ver_file}")
+                with open(ver_file, 'r') as f:
+                    version_data = json.load(f)
+                    file_version = version_data.get("version")
+                    if file_version:
+                        logger.info(f"Found version in {ver_file}: {file_version}")
+                        version_sources.append((os.path.basename(ver_file), file_version))
+    except Exception as e:
+        logger.error(f"Error reading version files: {e}")
+    
+    # Third priority (backup): Check if executable has a version resource (Windows only)
+    if os.name == 'nt' and getattr(sys, 'frozen', False):
+        try:
+            import win32api
+            exe_path = sys.executable
+            logger.info(f"Checking executable version info: {exe_path}")
+            info = win32api.GetFileVersionInfo(exe_path, '\\')
+            ms = info['FileVersionMS']
+            ls = info['FileVersionLS']
+            exe_version = f"{win32api.HIWORD(ms)}.{win32api.LOWORD(ms)}.{win32api.HIWORD(ls)}.{win32api.LOWORD(ls)}"
+            logger.info(f"Executable version: {exe_version}")
+            version_sources.append(('executable', exe_version))
+        except Exception as e:
+            logger.error(f"Error getting executable version: {e}")
+    
+    # Log all discovered versions for debugging
+    logger.info(f"Found version sources: {version_sources}")
+    
+    # Return the first available version, prioritized by the order above
+    if version_sources:
+        source, version = version_sources[0]
+        logger.info(f"Using version from {source}: {version}")
+        return version
+    
+    # Absolute fallback
+    logger.warning(f"No version information found, using default: 0.0.0")
+    return "0.0.0"
+
+def sync_version_files(version):
+    """
+    Synchronize version.json files with the given version
+    
+    Args:
+        version (str): Version string to write to files
+    """
+    # Update root version.json
     try:
         if os.path.exists(VERSION_FILE):
             with open(VERSION_FILE, 'r') as f:
                 version_data = json.load(f)
-                root_version = version_data.get("version")
-                if root_version:
-                    logger.info(f"Fallback to version.json: {root_version}")
-                    return root_version
+            
+            version_data["version"] = version
+            
+            with open(VERSION_FILE, 'w') as f:
+                json.dump(version_data, f, indent=4)
+                
+            logger.info(f"Updated version.json to match package.json: {version}")
     except Exception as e:
-        logger.error(f"Error reading version.json: {e}")
-    
-    return "0.0.0"  # Default version if no files found
+        logger.error(f"Error updating version.json: {e}")
+
+    # Update flask_app/version.json
+    try:
+        flask_version_file = os.path.join('flask_app', 'version.json')
+        if os.path.exists(flask_version_file):
+            with open(flask_version_file, 'r') as f:
+                flask_version_data = json.load(f)
+            
+            flask_version_data["version"] = version
+            
+            with open(flask_version_file, 'w') as f:
+                json.dump(flask_version_data, f, indent=4)
+                
+            logger.info(f"Updated flask_app/version.json to match package.json: {version}")
+    except Exception as e:
+        logger.error(f"Error updating flask_app/version.json: {e}")
 
 def is_auto_update_enabled():
     """
@@ -227,22 +305,28 @@ def check_for_update(forced_current_version=None):
         assets = release_data.get("assets", [])
         logger.info(f"Release assets: {[asset.get('name') for asset in assets]}")
         
-        # Look specifically for ZIP assets, not EXE
+        # First, look for ZIP files with "win" in the name (win-unpacked)
         for asset in assets:
-            asset_name = asset.get("name", "")
+            asset_name = asset.get("name", "").lower()
             asset_url = asset.get("browser_download_url")
             logger.info(f"Checking asset: {asset_name}, URL: {asset_url}")
             
-            if asset_name.endswith(".zip") and "win-unpacked" in asset_name:
+            # Specifically look for win ZIP files, which are unpacked builds
+            if asset_name.endswith(".zip") and "win" in asset_name:
                 download_url = asset_url
-                logger.info(f"Found direct update ZIP: {download_url}")
+                logger.info(f"Found win-unpacked ZIP file: {download_url}")
                 break
         
-        release_notes = release_data.get("body", "No release notes available.")
+        # IMPORTANT: If no win-unpacked ZIP found, DO NOT fall back to other assets
+        # Since we only handle ZIP files and specifically want the win-unpacked ZIP
+        if not download_url:
+            logger.warning(f"No win-unpacked ZIP file found for version {latest_version}")
+            # Return information for display purposes, but don't allow download/update
+            return (False, latest_version, None, release_data.get("body", "No release notes available."))
         
         # Compare versions - improved handling
-        if not latest_version or not download_url:
-            logger.warning(f"Invalid release data: version={latest_version}, download_url={download_url}")
+        if not latest_version:
+            logger.warning(f"Invalid release data: version={latest_version}")
             return (False, latest_version, None, None)
         
         try:
@@ -251,7 +335,7 @@ def check_for_update(forced_current_version=None):
             logger.info(f"Version comparison: {latest_version} > {current_version} = {is_newer}")
             
             if is_newer:
-                return (True, latest_version, download_url, release_notes)
+                return (True, latest_version, download_url, release_data.get("body", "No release notes available."))
             else:
                 return (False, latest_version, None, None)
         except Exception as e:
@@ -261,7 +345,7 @@ def check_for_update(forced_current_version=None):
             logger.info(f"Fallback string comparison: {latest_version} > {current_version} = {is_newer}")
             
             if is_newer:
-                return (True, latest_version, download_url, release_notes)
+                return (True, latest_version, download_url, release_data.get("body", "No release notes available."))
             else:
                 return (False, latest_version, None, None)
             
@@ -284,13 +368,22 @@ def download_update(download_url):
         logger.info(f"Downloading update from {download_url}")
         
         temp_dir = tempfile.gettempdir()
-        # Detect file type from URL
-        is_exe = download_url.lower().endswith('.exe')
-        file_path = os.path.join(temp_dir, 
-                                "youtube_auto_uploader_update.exe" if is_exe else 
-                                "youtube_auto_uploader_update.zip")
         
-        # Download the file with a proper user agent
+        # Detect if this is a win-zip file
+        url_lower = download_url.lower()
+        is_win_zip = url_lower.endswith('.zip') and 'win' in url_lower
+        
+        # Set file type and path
+        if is_win_zip:
+            file_type = "win-zip"
+            file_path = os.path.join(temp_dir, "youtube_auto_uploader_update_win.zip")
+        else:
+            file_type = "zip"
+            file_path = os.path.join(temp_dir, "youtube_auto_uploader_update.zip")
+        
+        logger.info(f"Download type: {file_type}, saving to: {file_path}")
+        
+        # Download with a proper user agent
         headers = {
             'User-Agent': 'YT-Auto-Uploader-App'
         }
@@ -322,7 +415,19 @@ def download_update(download_url):
         # Verify the downloaded file
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
             logger.info(f"Update downloaded to {file_path}")
-            return file_path, "exe" if is_exe else "zip"
+            
+            # Verify this is actually a ZIP file
+            try:
+                with open(file_path, 'rb') as f:
+                    header = f.read(4)
+                    # Check ZIP magic number
+                    if not header.startswith(b'PK\x03\x04'):
+                        logger.warning("Downloaded file is not a valid ZIP file!")
+                        return None, None
+            except Exception as e:
+                logger.error(f"Error verifying ZIP file: {e}")
+            
+            return file_path, file_type
         else:
             logger.error(f"Downloaded file is empty or missing: {file_path}")
             return None, None
@@ -341,19 +446,51 @@ def apply_update(file_path, latest_version, file_type="zip"):
         if isinstance(file_path, tuple):
             file_path, file_type = file_path
         
-        # We only handle ZIP updates in this approach
-        if file_type != "zip":
-            logger.error(f"Unsupported update type: {file_type}")
+        # Check if file_path is None (download failed)
+        if file_path is None:
+            logger.error("Cannot apply update: file_path is None (download failed or invalid file type)")
             return False
         
-        # Ensure app can write to its own directory
-        temp_dir = os.path.join(tempfile.gettempdir(), "youtube_auto_uploader_update")
-        app_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        # Only handle ZIP files now
+        if not file_path.endswith('.zip'):
+            logger.error(f"Unsupported update file: {file_path}")
+            return False
+        
+        # Check if file exists
+        if not os.path.exists(file_path):
+            logger.error(f"Update file does not exist: {file_path}")
+            return False
+            
+        # Verify this is a ZIP file by trying to open it
+        try:
+            with zipfile.ZipFile(file_path, 'r') as test_zip:
+                # Try to get the file list to verify it's a valid ZIP
+                file_list = test_zip.namelist()
+                logger.info(f"ZIP file verified with {len(file_list)} files")
+        except zipfile.BadZipFile:
+            logger.error(f"Invalid ZIP file: {file_path}")
+            return False
+        except Exception as e:
+            logger.error(f"Error verifying ZIP file: {e}")
+            return False
+        
+        # Determine app root directory
+        if getattr(sys, 'frozen', False):
+            # We are running in a bundle
+            app_dir = os.path.dirname(sys.executable)
+        else:
+            # We are running in a normal Python environment
+            app_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         
         logger.info(f"Application directory: {app_dir}")
+        
+        # Ensure app can write to its own directory
         if not os.access(app_dir, os.W_OK):
             logger.error(f"No write access to application directory: {app_dir}")
             return False
+        
+        # Use a specific temp directory for our update
+        temp_dir = os.path.join(tempfile.gettempdir(), "youtube_auto_uploader_update")
         
         # Clear and create temp directory
         if os.path.exists(temp_dir):
@@ -365,30 +502,98 @@ def apply_update(file_path, latest_version, file_type="zip"):
         with zipfile.ZipFile(file_path, 'r') as zip_ref:
             zip_ref.extractall(temp_dir)
         
-        # Find the extracted directory
+        # Find the extracted directory - look specifically for specific structures
         extract_root = temp_dir
-        subdirs = [d for d in os.listdir(temp_dir) if os.path.isdir(os.path.join(temp_dir, d))]
-        if subdirs:
-            # If there's a single subdirectory, use that as the root
+        
+        # Check for common subdirectory structures in ZIP files
+        for possible_subdir in ['win-unpacked', 'app', 'YouTubeAutoUploader']:
+            if os.path.exists(os.path.join(temp_dir, possible_subdir)):
+                extract_root = os.path.join(temp_dir, possible_subdir)
+                logger.info(f"Found app subdirectory: {possible_subdir}")
+                break
+                
+        # Check for alternative structures (just one subdirectory)
+        if extract_root == temp_dir:
+            subdirs = [d for d in os.listdir(temp_dir) if os.path.isdir(os.path.join(temp_dir, d))]
             if len(subdirs) == 1:
                 extract_root = os.path.join(temp_dir, subdirs[0])
+                logger.info(f"Using single subdirectory as extract root: {extract_root}")
         
-        # Create update script that will run after app closes
+        logger.info(f"Using extract directory: {extract_root}")
+        
+        # Create exclude list for the update script
+        exclude_path = os.path.join(temp_dir, "exclude.txt")
+        with open(exclude_path, "w") as f:
+            f.write("update_script.bat\n")
+            f.write("config.json\n")
+            f.write("version.json\n")
+            f.write(".git\n")
+            f.write("exclude.txt\n")
+        
+        # Create update script with better path handling
         script_path = os.path.join(temp_dir, "update_script.bat")
+        
         with open(script_path, "w") as f:
             f.write("@echo off\n")
+            f.write("setlocal enabledelayedexpansion\n\n")
             f.write("echo Updating YouTube Auto Uploader...\n")
-            f.write(f"timeout /t 2 /nobreak > nul\n")  # Wait for app to close
+            f.write("echo Waiting for application to close completely...\n")
+            f.write("timeout /t 3 /nobreak > nul\n\n")
             
-            # Copy all files excluding specific ones
-            f.write(f'robocopy "{extract_root}" "{app_dir}" /E /PURGE /XF update_script.bat config.json version.json\n')
+            # Get the current directory (reliably)
+            f.write("REM Get the executable directory (where the app is actually installed)\n")
+            f.write("set \"APP_DIR=%~dp0\"\n")
+            f.write("cd /d \"%APP_DIR%\"\n")
+            f.write("cd ..\n\n")
             
-            # Update version file but preserve settings
-            f.write(f'echo {{\"version\": \"{latest_version}\", \"build_date\": \"{time.strftime("%Y-%m-%d %H:%M:%S")}\", \"auto_update\": true}} > "{app_dir}\\version.json"\n')
+            f.write("echo Application directory: %CD%\n\n")
             
-            # Start the app again
-            f.write(f'start "" "{app_dir}\\YouTube Auto Uploader.exe"\n')
-            f.write("exit\n")
+            # Try to terminate any running processes
+            f.write("REM Try to terminate any running instances of the app\n")
+            f.write("taskkill /F /IM \"YouTube Auto Uploader.exe\" /T 2>nul\n")
+            f.write("timeout /t 1 /nobreak > nul\n\n")
+            
+            f.write("echo Copying updated files...\n\n")
+            
+            # Use xcopy instead of robocopy for better compatibility
+            f.write("REM Use xcopy instead of robocopy for better compatibility\n")
+            f.write("echo Copying main files...\n")
+            f.write(f"xcopy /E /Y /I /Q \"%~dp0extract_root\\*\" \"%CD%\\\" /EXCLUDE:%~dp0exclude.txt\n\n")
+            
+            # Specially handle flask_app directory
+            f.write("REM Check for flask_app directory\n")
+            f.write("if not exist \"%CD%\\resources\\flask_app\" (\n")
+            f.write("    echo Creating flask_app directory...\n")
+            f.write("    mkdir \"%CD%\\resources\\flask_app\"\n")
+            f.write(")\n\n")
+            
+            f.write("REM Ensure flask_app directory is properly populated\n")
+            f.write("if exist \"%~dp0extract_root\\resources\\flask_app\" (\n")
+            f.write("    echo Copying flask_app files...\n")
+            f.write("    xcopy /E /Y /I /Q \"%~dp0extract_root\\resources\\flask_app\\*\" \"%CD%\\resources\\flask_app\\\"\n")
+            f.write(")\n\n")
+            
+            # Update version file
+            f.write(f"echo {{\"version\": \"{latest_version}\", \"build_date\": \"{time.strftime('%Y-%m-%d %H:%M:%S')}\", \"auto_update\": true}} > \"%CD%\\version.json\"\n\n")
+            
+            # Create a verification file
+            f.write("REM Create a simple verification file to confirm update completed\n")
+            f.write("echo Updated on %DATE% %TIME% > \"%CD%\\resources\\update_completed.txt\"\n\n")
+            
+            f.write("echo Update completed successfully!\n")
+            f.write("echo Starting application...\n\n")
+            
+            # Start the app
+            f.write("REM Start the app\n")
+            f.write("start \"\" \"%CD%\\YouTube Auto Uploader.exe\"\n\n")
+            
+            f.write("echo You can close this window now.\n")
+            f.write("exit /b 0\n")
+        
+        # Copy the extract directory path to an easy-to-find location for the batch script
+        extract_root_file = os.path.join(temp_dir, "extract_root")
+        with open(extract_root_file, "w") as f:
+            f.write(extract_root)
         
         # Launch the update script and exit the application
         logger.info("Launching update script and exiting application")
@@ -397,7 +602,6 @@ def apply_update(file_path, latest_version, file_type="zip"):
                          start_new_session=True)
         
         # Signal to main app that it should exit
-        # return a special signal that tells the app to exit
         return "EXIT_FOR_UPDATE"
     
     except Exception as e:

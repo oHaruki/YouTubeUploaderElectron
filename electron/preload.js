@@ -1,4 +1,48 @@
 const { contextBridge, ipcRenderer } = require('electron');
+const fs = require('fs');
+const path = require('path');
+const app = require('electron').remote?.app;
+
+// Try to write the version to a file that Flask can read
+function syncVersionToFile() {
+  try {
+    // Get the version directly from Electron
+    const version = app ? app.getVersion() : require('../package.json').version;
+    
+    // Create a version.json file in the app resources directory where Flask can find it
+    const resourcesPath = process.resourcesPath || path.join(__dirname, '..');
+    const versionPath = path.join(resourcesPath, 'flask_app', 'version.json');
+    
+    // Read existing file if it exists
+    let versionData = {
+      version: version,
+      build_date: new Date().toISOString().split('T')[0] + ' ' + new Date().toTimeString().split(' ')[0],
+      auto_update: true
+    };
+    
+    try {
+      if (fs.existsSync(versionPath)) {
+        const existingData = JSON.parse(fs.readFileSync(versionPath, 'utf8'));
+        // Keep auto_update setting but update version
+        versionData.auto_update = existingData.auto_update;
+      }
+    } catch (e) {
+      console.error('Error reading existing version file:', e);
+    }
+    
+    // Write the updated version file
+    fs.writeFileSync(versionPath, JSON.stringify(versionData, null, 4));
+    console.log(`Synchronized version file at ${versionPath} with version ${version}`);
+    
+    return true;
+  } catch (e) {
+    console.error('Error syncing version to file:', e);
+    return false;
+  }
+}
+
+// Try to sync version file when preload runs
+syncVersionToFile();
 
 // Expose safe APIs to the renderer process
 contextBridge.exposeInMainWorld('electron', {
@@ -52,5 +96,11 @@ contextBridge.exposeInMainWorld('electron', {
   onUpdateDownloaded: (callback) => {
     ipcRenderer.on('update-downloaded', (_, info) => callback(info));
     return () => ipcRenderer.removeListener('update-downloaded', callback);
-  }
+  },
+  
+  // Version sync for the Flask backend
+  syncVersionFile: () => syncVersionToFile(),
+  
+  // For the update process
+  exitForUpdate: () => ipcRenderer.invoke('exit-for-update')
 });
