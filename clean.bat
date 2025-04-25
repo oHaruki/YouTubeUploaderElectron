@@ -1,8 +1,7 @@
 @echo off
-echo Cleaning up build environment...
+echo Cleaning build environment...
 
 REM Kill any running Electron processes
-echo Stopping any running Electron processes...
 taskkill /F /IM electron.exe /T 2>nul
 taskkill /F /IM YouTube* /T 2>nul
 
