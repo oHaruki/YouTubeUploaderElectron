@@ -1015,13 +1015,27 @@ function checkForUpdates() {
                 // Update version info
                 document.getElementById('currentVersionText').textContent = data.current_version;
                 
-                // Set auto-update toggle state
-                document.getElementById('autoUpdateToggle').checked = data.auto_update_enabled;
+                // Remove auto-update toggle - no longer needed
+                const autoUpdateToggle = document.getElementById('autoUpdateToggle');
+                if (autoUpdateToggle && autoUpdateToggle.parentNode) {
+                    autoUpdateToggle.parentNode.remove();
+                }
                 
                 if (data.update_available) {
                     // Show update available message
                     document.getElementById('latestVersionText').textContent = data.latest_version;
                     document.getElementById('releaseNotes').textContent = data.release_notes || "No release notes available.";
+                    
+                    // Replace the update button with a link to GitHub
+                    const updateBtnContainer = document.querySelector('#updateAvailableMessage .mt-3');
+                    if (updateBtnContainer) {
+                        updateBtnContainer.innerHTML = `
+                            <a href="${data.release_url}" target="_blank" class="btn btn-primary">
+                                <i class="bi bi-github me-1"></i> Download from GitHub
+                            </a>
+                        `;
+                    }
+                    
                     updateAvailableEl.classList.remove('d-none');
                 } else {
                     // Show up to date message
@@ -1042,127 +1056,6 @@ function checkForUpdates() {
         });
 }
 
-function applyUpdate() {
-    console.log("Applying update");
-    
-    // Show loading
-    const updateNowBtn = document.getElementById('updateNowBtn');
-    const originalBtnText = updateNowBtn.innerHTML;
-    updateNowBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Updating...';
-    updateNowBtn.disabled = true;
-    
-    // Apply update
-    fetch('/api/updates/apply', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            if (data.exit_for_update) {
-                // Show message that app will restart 
-                showToast('Success', 'Update in progress. The application will restart shortly...', 'success');
-                
-                // Show restart screen
-                document.body.innerHTML = `
-                    <div class="container text-center" style="margin-top: 100px;">
-                        <h2>Applying Update</h2>
-                        <div class="spinner-border text-primary mt-4" role="status" style="width: 4rem; height: 4rem;">
-                            <span class="visually-hidden">Updating...</span>
-                        </div>
-                        <p class="lead mt-4">Please wait while the application updates and restarts...</p>
-                    </div>
-                `;
-                
-                // If we're in Electron, trigger app exit
-                if (window.electron) {
-                    setTimeout(() => {
-                        window.electron.exitForUpdate();
-                    }, 2000);
-                }
-            } else {
-                // Handle normal restart
-                showToast('Success', 'Update installed successfully! Restarting application...', 'success');
-                setTimeout(() => {
-                    restartApplication();
-                }, 3000);
-            }
-        } else {
-            // Show error
-            updateNowBtn.innerHTML = originalBtnText;
-            updateNowBtn.disabled = false;
-            showToast('Error', 'Update failed: ' + (data.error || "Unknown error"), 'danger');
-        }
-    })
-    .catch(error => {
-        console.error('Error applying update:', error);
-        updateNowBtn.innerHTML = originalBtnText;
-        updateNowBtn.disabled = false;
-        showToast('Error', 'Connection error while updating', 'danger');
-    });
-}
-
-function toggleAutoUpdate() {
-    const enabled = document.getElementById('autoUpdateToggle').checked;
-    console.log(`Setting auto-update to: ${enabled}`);
-    
-    fetch('/api/updates/settings', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            auto_update_enabled: enabled
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('Success', `Auto-update ${enabled ? 'enabled' : 'disabled'}`, 'success');
-        } else {
-            showToast('Error', 'Failed to update settings: ' + (data.error || "Unknown error"), 'danger');
-            // Revert the toggle if setting failed
-            document.getElementById('autoUpdateToggle').checked = !enabled;
-        }
-    })
-    .catch(error => {
-        console.error('Error updating auto-update setting:', error);
-        showToast('Error', 'Error updating setting', 'danger');
-        // Revert the toggle on error
-        document.getElementById('autoUpdateToggle').checked = !enabled;
-    });
-}
-
-function restartApplication() {
-    fetch('/api/updates/restart', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Show restarting message
-            document.body.innerHTML = `
-                <div class="container text-center" style="margin-top: 100px;">
-                    <h2>Restarting Application</h2>
-                    <div class="spinner-border text-primary mt-4" role="status" style="width: 4rem; height: 4rem;">
-                        <span class="visually-hidden">Restarting...</span>
-                    </div>
-                    <p class="lead mt-4">Please wait while the application restarts...</p>
-                    <p>The page will reload automatically. If it doesn't, <a href="/" class="btn btn-link">click here</a>.</p>
-                </div>
-            `;
-            
-            // Try to reload the page after a delay
-            setTimeout(() => {
-                window.location.reload();
-            }, 5000);
-        }
-    })
-    .catch(error => {
-        console.error('Error restarting application:', error);
-        showToast('Error', 'Error restarting application', 'danger');
-    });
-}
-
 // Version selection functions
 function loadAvailableVersions() {
     console.log("Loading available versions");
@@ -1175,9 +1068,6 @@ function loadAvailableVersions() {
     fetch('/api/updates/versions')
         .then(response => response.json())
         .then(data => {
-            // Log the full response for debugging
-            console.log("Version check API response:", data);
-            
             if (data.success) {
                 const currentVersion = data.current_version;
                 console.log(`Current version: ${currentVersion}`);
@@ -1199,7 +1089,7 @@ function loadAvailableVersions() {
                     const isCurrent = version.is_current || version.version === currentVersion;
                     
                     html += `
-                        <a href="#" class="list-group-item list-group-item-action ${isCurrent ? 'active' : ''}" 
+                        <div class="list-group-item list-group-item-action ${isCurrent ? 'active' : ''}" 
                            data-version-id="${version.id}" data-version="${version.version}">
                             <div class="d-flex w-100 justify-content-between">
                                 <h6 class="mb-1">${version.name || 'Version ' + version.version}</h6>
@@ -1208,11 +1098,11 @@ function loadAvailableVersions() {
                             <p class="mb-1">${version.notes || 'No release notes available'}</p>
                             ${isCurrent ? 
                                 '<span class="badge bg-success">Current Version</span>' : 
-                                `<button class="btn btn-sm btn-primary mt-2" onclick="installVersion('${version.id}', '${version.version}', event)">
-                                    <i class="bi bi-download me-1"></i> Install This Version
-                                </button>`
+                                `<a href="${version.release_url}" target="_blank" class="btn btn-sm btn-primary mt-2">
+                                    <i class="bi bi-github me-1"></i> View on GitHub
+                                </a>`
                             }
-                        </a>
+                        </div>
                     `;
                 });
                 html += '</div>';
@@ -1239,7 +1129,7 @@ function loadAvailableVersions() {
             versionListEl.innerHTML = `
                 <div class="alert alert-danger">
                     <h5><i class="bi bi-exclamation-triangle me-2"></i>Connection Error</h5>
-                    <p>Failed to connect to the update server: ${error.message}</p>
+                    <p>Failed to connect to the update server</p>
                     <div class="mt-2">
                         <button class="btn btn-sm btn-outline-danger" onclick="loadAvailableVersions()">
                             <i class="bi bi-arrow-repeat me-1"></i> Retry
@@ -1250,62 +1140,8 @@ function loadAvailableVersions() {
         });
 }
 
-function installVersion(versionId, versionNumber, event) {
-    if (event) {
-        event.preventDefault();
-        event.stopPropagation();
-    }
-    
-    console.log(`Installing version ${versionNumber} (ID: ${versionId})`);
-    
-    if (!confirm(`Are you sure you want to install version ${versionNumber}? The application will restart.`)) {
-        return;
-    }
-    
-    const button = event.target.closest('button');
-    const originalText = button.innerHTML;
-    button.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Installing...';
-    button.disabled = true;
-    
-    fetch(`/api/updates/install/${versionId}`, {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('Success', `Version ${versionNumber} installed successfully! Restarting...`, 'success');
-            
-            // Restart the application
-            setTimeout(() => {
-                restartApplication();
-            }, 3000);
-        } else {
-            button.innerHTML = originalText;
-            button.disabled = false;
-            showToast('Error', 'Installation failed: ' + (data.error || 'Unknown error'), 'danger');
-        }
-    })
-    .catch(error => {
-        console.error('Error installing version:', error);
-        button.innerHTML = originalText;
-        button.disabled = false;
-        showToast('Error', 'Error installing version', 'danger');
-    });
-}
-
-// Load updates when the About tab is shown
-document.getElementById('about-tab').addEventListener('shown.bs.tab', function (e) {
-    checkForUpdates();
-});
-
 // Set up event listeners for update functionality
 document.addEventListener('DOMContentLoaded', function() {
-    // Auto-update toggle
-    document.getElementById('autoUpdateToggle').addEventListener('change', toggleAutoUpdate);
-    
-    // Update now button
-    document.getElementById('updateNowBtn')?.addEventListener('click', applyUpdate);
-    
     // Manual check button
     document.getElementById('manualCheckUpdateBtn')?.addEventListener('click', checkForUpdates);
     

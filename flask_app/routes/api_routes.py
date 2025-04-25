@@ -705,138 +705,63 @@ def api_select_project():
     
 @api_bp.route('/updates/check', methods=['GET'])
 def check_for_updates():
-    """Check for available updates with robust error handling"""
+    """Check for available updates, simplified to just check GitHub"""
     import auto_updater
     
     try:
-        # Add detailed logging
-        logger = logging.getLogger('api')
-        logger.info("API: Checking for updates")
+        # Get current version from auto_updater
+        current_version = auto_updater.get_current_version()
         
-        # Get current version from package.json as priority
-        current_version = "0.0.0"
-        try:
-            if os.path.exists('package.json'):
-                with open('package.json', 'r') as f:
-                    package_data = json.load(f)
-                    current_version = package_data.get('version', "0.0.0")
-                    logger.info(f"Using version from package.json: {current_version}")
-        except Exception as e:
-            logger.error(f"Error reading package.json: {e}")
-            # Fall back to auto_updater's version detection
-            current_version = auto_updater.get_current_version()
-            
-        # Pass the version to the check_for_update function
-        update_available, latest_version, download_url, release_notes = auto_updater.check_for_update(forced_current_version=current_version)
-        
-        # Log the results
-        logger.info(f"API: Update check results - current={current_version}, latest={latest_version}, available={update_available}")
+        # Check if a new version is available
+        update_available, latest_version, release_url, release_notes = auto_updater.check_for_update()
         
         return jsonify({
             'success': True,
             'update_available': update_available,
             'current_version': current_version,
             'latest_version': latest_version,
+            'release_url': release_url,
             'release_notes': release_notes,
-            'auto_update_enabled': auto_updater.is_auto_update_enabled()
+            'auto_update_enabled': False  # Always false in simplified version
         })
     except Exception as e:
-        # Log the full error with traceback
-        logger = logging.getLogger('api')
-        logger.error(f"API: Error checking for updates: {str(e)}")
-        logger.error(traceback.format_exc())
-        
         return jsonify({
             'success': False,
             'error': f"Error checking for updates: {str(e)}"
         })
 
-@api_bp.route('/updates/apply', methods=['POST'])
-def apply_update():
-    """Download and apply available update"""
+@api_bp.route('/updates/versions', methods=['GET'])
+def get_available_versions():
+    """Get list of all available versions (simplified to latest only)"""
     import auto_updater
     
     try:
-        update_available, latest_version, download_url, release_notes = auto_updater.check_for_update()
-        
-        if not update_available:
-            return jsonify({
-                'success': False,
-                'error': 'No updates available'
-            })
-        
-        download_result = auto_updater.download_update(download_url)
-        if not download_result:
-            return jsonify({
-                'success': False,
-                'error': 'Failed to download update'
-            })
-        
-        result = auto_updater.apply_update(download_result, latest_version)
-        
-        # Special case for "EXIT_FOR_UPDATE" signal
-        if result == "EXIT_FOR_UPDATE":
-            return jsonify({
-                'success': True,
-                'message': f'Update to version {latest_version} in progress',
-                'exit_for_update': True
-            })
-        elif result:
-            return jsonify({
-                'success': True,
-                'message': f'Updated to version {latest_version}',
-                'require_restart': True
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': 'Failed to apply update'
-            })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-@api_bp.route('/updates/settings', methods=['POST'])
-def update_settings():
-    """Update auto-update settings"""
-    import auto_updater
-    
-    try:
-        data = request.json
-        enabled = data.get('auto_update_enabled', True)
-        
-        auto_updater.set_auto_update_enabled(enabled)
+        # Get version information
+        versions = auto_updater.get_all_versions()
+        current_version = auto_updater.get_current_version()
         
         return jsonify({
             'success': True,
-            'auto_update_enabled': enabled
+            'versions': versions,
+            'current_version': current_version
         })
+            
     except Exception as e:
+        # Always return at least the current version
+        current_version = auto_updater.get_current_version()
         return jsonify({
-            'success': False,
-            'error': str(e)
+            'success': True,  # Return success=True to avoid UI error
+            'versions': [{
+                'id': 'current',
+                'version': current_version,
+                'name': f'Current Version {current_version}',
+                'date': '',
+                'notes': 'This is your currently installed version.',
+                'is_current': True,
+                'release_url': auto_updater.GITHUB_RELEASES_URL
+            }],
+            'current_version': current_version
         })
-
-@api_bp.route('/updates/restart', methods=['POST'])
-def restart_app():
-    """Restart the application"""
-    import auto_updater
-    import threading
-    
-    def delayed_restart():
-        # Wait a moment for the response to be sent
-        time.sleep(1)
-        auto_updater.restart_application()
-    
-    # Start restart in a separate thread
-    threading.Thread(target=delayed_restart).start()
-    
-    return jsonify({
-        'success': True,
-        'message': 'Restarting application...'
-    })    
 
 @api_bp.route('/projects/add', methods=['POST'])
 def api_add_project():
@@ -872,272 +797,3 @@ def api_add_project():
         'success': True,
         'project_id': project_id
     })
-
-# Version selection routes
-@api_bp.route('/updates/versions', methods=['GET'])
-def get_available_versions():
-    """Get list of all available versions with improved error handling"""
-    import auto_updater
-    import traceback
-    
-    logger = logging.getLogger('api')
-    logger.info("API: Getting available versions - SIMPLIFIED")
-    
-    # Get current version from package.json first
-    current_version = "0.0.0"
-    try:
-        if os.path.exists('package.json'):
-            with open('package.json', 'r') as f:
-                package_data = json.load(f)
-                current_version = package_data.get('version', "0.0.0")
-                logger.info(f"Using version from package.json: {current_version}")
-    except Exception as e:
-        logger.error(f"Error reading package.json: {e}")
-    
-    try:
-        # Simplified version - always return at least these two versions
-        # This ensures the UI always has something to display
-        versions = [
-            {
-                'id': 'github-latest',
-                'version': '1.0.0',  # Hard-coded GitHub version
-                'name': 'GitHub Release 1.0.0',
-                'date': '2025-04-01T00:00:00Z',
-                'notes': 'Latest GitHub release',
-                'is_current': False
-            },
-            {
-                'id': 'current',
-                'version': current_version,
-                'name': f'Current Version {current_version}',
-                'date': time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                'notes': 'Your currently installed version',
-                'is_current': True
-            }
-        ]
-        
-        # Try to get versions from GitHub but don't fail if it doesn't work
-        try:
-            github_versions = auto_updater.get_all_versions()
-            if github_versions and len(github_versions) > 0:
-                versions = github_versions
-        except Exception as e:
-            logger.error(f"Could not get GitHub versions: {e}")
-            # Continue with the fallback versions
-        
-        logger.info(f"Returning {len(versions)} versions")
-        return jsonify({
-            'success': True,
-            'versions': versions,
-            'current_version': current_version
-        })
-            
-    except Exception as e:
-        logger.error(f"Error in versions endpoint: {e}")
-        logger.error(traceback.format_exc())
-        
-        # Always return at least the current version
-        return jsonify({
-            'success': True,  # Note: returning success=True to avoid UI error
-            'versions': [{
-                'id': 'current',
-                'version': current_version,
-                'name': f'Current Version {current_version}',
-                'date': time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                'notes': 'This is your currently installed version.',
-                'is_current': True
-            }],
-            'current_version': current_version
-        })
-
-
-@api_bp.route('/updates/debug', methods=['GET'])
-def debug_versions():
-    """Debug endpoint to get detailed version information"""
-    import auto_updater
-    
-    # Set up logging
-    logger = logging.getLogger('api')
-    logger.info("API: Debug versions endpoint called")
-    
-    debug_info = {
-        'versions': {},
-        'github': {},
-        'files': {},
-        'errors': []
-    }
-    
-    # Get current version from different sources
-    try:
-        # Check package.json (primary source)
-        if os.path.exists('package.json'):
-            with open('package.json', 'r') as f:
-                package_data = json.load(f)
-                debug_info['versions']['package_json'] = {
-                    'version': package_data.get('version'),
-                    'name': package_data.get('name')
-                }
-        else:
-            debug_info['errors'].append('package.json not found')
-        
-        # Check main version.json
-        if os.path.exists('version.json'):
-            with open('version.json', 'r') as f:
-                version_data = json.load(f)
-                debug_info['versions']['main_version_json'] = version_data
-        else:
-            debug_info['errors'].append('Main version.json not found')
-        
-        # Check flask_app/version.json
-        flask_version = os.path.join('flask_app', 'version.json')
-        if os.path.exists(flask_version):
-            with open(flask_version, 'r') as f:
-                version_data = json.load(f)
-                debug_info['versions']['flask_version_json'] = version_data
-        else:
-            debug_info['errors'].append('flask_app/version.json not found')
-        
-        # Get current version from auto_updater
-        debug_info['versions']['current_version'] = auto_updater.get_current_version()
-        debug_info['versions']['auto_update_enabled'] = auto_updater.is_auto_update_enabled()
-        
-        # Try GitHub API
-        try:
-            # Set up proper headers for GitHub API
-            headers = {
-                'User-Agent': 'YT-Auto-Uploader-App',
-                'Accept': 'application/vnd.github.v3+json'
-            }
-            
-            # Get latest release
-            response = requests.get(auto_updater.GITHUB_API_URL, headers=headers, timeout=15)
-            debug_info['github']['latest_release_status'] = response.status_code
-            
-            if response.status_code == 200:
-                debug_info['github']['latest_release'] = response.json()
-            else:
-                debug_info['github']['latest_release_error'] = response.text
-            
-            # Get all releases
-            response = requests.get(auto_updater.GITHUB_ALL_RELEASES_URL, headers=headers, timeout=15)
-            debug_info['github']['all_releases_status'] = response.status_code
-            
-            if response.status_code == 200:
-                releases = response.json()
-                debug_info['github']['release_count'] = len(releases)
-                if releases:
-                    # Just include basic info to avoid huge response
-                    debug_info['github']['releases'] = [{
-                        'id': r.get('id'),
-                        'tag_name': r.get('tag_name'),
-                        'name': r.get('name'),
-                        'created_at': r.get('created_at'),
-                        'asset_count': len(r.get('assets', []))
-                    } for r in releases[:5]]  # Limit to 5 releases
-            else:
-                debug_info['github']['all_releases_error'] = response.text
-                
-        except Exception as e:
-            debug_info['errors'].append(f'GitHub API error: {str(e)}')
-        
-        # Check for version files
-        version_files = glob.glob('*.json') + glob.glob('flask_app/*.json')
-        debug_info['files']['version_files'] = version_files
-        
-        return jsonify({
-            'success': True,
-            'debug_info': debug_info
-        })
-        
-    except Exception as e:
-        logger.error(f"API: Error in debug endpoint: {str(e)}")
-        logger.error(traceback.format_exc())
-        
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'traceback': traceback.format_exc()
-        })
-
-@api_bp.route('/updates/install/<version_id>', methods=['POST'])
-def install_specific_version(version_id):
-    """Install a specific version"""
-    import requests
-    import auto_updater
-    import logging
-    
-    logger = logging.getLogger('api')
-    
-    try:
-        # Fetch specific release
-        logger.info(f"Fetching release information for ID: {version_id}")
-        
-        response = requests.get(f"https://api.github.com/repos/oHaruki/YouTubeUploaderElectron/releases/{version_id}", 
-                                headers={
-                                    'User-Agent': 'YT-Auto-Uploader-App',
-                                    'Accept': 'application/vnd.github.v3+json'
-                                },
-                                timeout=10)
-        response.raise_for_status()
-        
-        release = response.json()
-        download_url = None
-        
-        # Find the appropriate ZIP file (prioritize win-unpacked ZIP)
-        assets = release.get("assets", [])
-        logger.info(f"Available assets: {[asset.get('name', '') for asset in assets]}")
-        
-        # First look for ZIPs with "win" in the name
-        for asset in assets:
-            asset_name = asset.get("name", "").lower()
-            if asset_name.endswith(".zip") and "win" in asset_name:
-                download_url = asset.get("browser_download_url")
-                logger.info(f"Found win ZIP file: {asset_name}")
-                break
-        
-        if not download_url:
-            logger.warning(f"No suitable win-ZIP file found in release {version_id}")
-            return jsonify({
-                'success': False,
-                'error': 'No suitable ZIP file found in this release. Please add a win-ZIP file to the release.'
-            })
-        
-        version = release.get('tag_name', '').lstrip('v')
-        logger.info(f"Attempting to download and install version {version} from {download_url}")
-        
-        # Download and apply
-        zip_path = auto_updater.download_update(download_url)
-        if not zip_path or zip_path[0] is None:
-            logger.error("Download failed or returned an invalid file")
-            return jsonify({
-                'success': False,
-                'error': 'Failed to download update file'
-            })
-        
-        success = auto_updater.apply_update(zip_path, version)
-        if not success:
-            logger.error("Failed to apply update")
-            return jsonify({
-                'success': False,
-                'error': 'Failed to apply update'
-            })
-        
-        if success == "EXIT_FOR_UPDATE":
-            logger.info("Update ready for installation after app restart")
-            return jsonify({
-                'success': True,
-                'message': f'Update to version {version} in progress',
-                'exit_for_update': True
-            })
-        
-        return jsonify({
-            'success': True,
-            'message': f'Updated to version {version}',
-            'require_restart': True
-        })
-    except Exception as e:
-        logger.error(f"Error installing version {version_id}: {str(e)}", exc_info=True)
-        return jsonify({
-            'success': False,
-            'error': f'Update error: {str(e)}'
-        })
