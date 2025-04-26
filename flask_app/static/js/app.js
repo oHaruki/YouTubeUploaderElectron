@@ -81,101 +81,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // DOM Ready
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log("App initialization started");
-        
-        // Get initial state from the page
-        isMonitoring = document.getElementById('statusIndicator').innerText.includes('Monitoring');
-        isAuthenticated = !document.getElementById('statusIndicator').innerText.includes('Not Authenticated');
-        currentTheme = document.documentElement.getAttribute('data-bs-theme') || 'light';
-        
-        console.log(`Initial state - Monitoring: ${isMonitoring}, Authenticated: ${isAuthenticated}`);
-        
-        // Setup event listeners
-        document.getElementById('startMonitoringBtn').addEventListener('click', startMonitoring);
-        document.getElementById('stopMonitoringBtn').addEventListener('click', stopMonitoring);
-        document.getElementById('scanFolderOnceBtn').addEventListener('click', scanFolderOnce);
-        document.getElementById('clearCompletedBtn').addEventListener('click', clearCompletedUploads);
-        document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
-        document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
-        
-        // Initialize button states
-        updateMonitoringButtons();
-        
-        // Rest of initialization code...
-        
-        // Start refresh interval for queue
-        refreshInterval = setInterval(refreshQueue, 1000);
-        refreshQueue(); // Immediate first refresh
-    });
-
-// Add the new scan function
-// Scan folder once function
-function scanFolderOnce() {
-    console.log("Scanning folder once");
+    // Initialize button states
+    updateMonitoringButtons();
     
-    // Show loading indicator on the button
-    const scanBtn = document.getElementById('scanFolderOnceBtn');
-    const originalText = scanBtn.innerHTML;
-    scanBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Scanning...';
-    scanBtn.disabled = true;
-    
-    fetch('/api/folder/scan', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        // Restore button
-        scanBtn.innerHTML = originalText;
-        scanBtn.disabled = false;
-        
-        if (data.success) {
-            console.log(`Scan completed: found ${data.scanned_count} videos`);
-            
-            if (data.scanned_count > 0) {
-                // Force immediate queue refresh
-                refreshQueue();
-                showToast('Success', `Scanned folder and found ${data.scanned_count} video files. Check the upload queue!`, 'success');
-            } else {
-                showToast('Info', 'No new video files were found in the folder', 'info');
-            }
-        } else {
-            console.error(`Failed to scan folder: ${data.error}`);
-            showToast('Error', 'Failed to scan folder: ' + (data.error || 'Unknown error'), 'danger');
-        }
-    })
-    .catch(error => {
-        // Restore button
-        scanBtn.innerHTML = originalText;
-        scanBtn.disabled = false;
-        
-        console.error('Error scanning folder:', error);
-        showToast('Error', 'Error scanning folder. Check console for details.', 'danger');
-    });
-}
-
-// Update function to reflect button state
-function updateMonitoringButtons() {
-    const startBtn = document.getElementById('startMonitoringBtn');
-    const stopBtn = document.getElementById('stopMonitoringBtn');
-    const scanBtn = document.getElementById('scanFolderOnceBtn');
-    
-    if (isMonitoring) {
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-        scanBtn.disabled = !isAuthenticated;
-    } else {
-        startBtn.disabled = !isAuthenticated;
-        stopBtn.disabled = true;
-        scanBtn.disabled = !isAuthenticated;
-    }
-    
-    updateStatusIndicator();
-}
-
     // Start refresh interval for queue - more frequent updates
-    refreshInterval = setInterval(refreshQueue, 1000); // Changed from 2000 to 1000ms
+    refreshInterval = setInterval(refreshQueue, 1000); // More frequent updates (1 second)
     refreshQueue(); // Immediate first refresh
     
     // Update upload limit timer if needed
@@ -285,6 +195,7 @@ function refreshQueue() {
         .catch(error => console.error('Error refreshing queue:', error));
 }
 
+// This function updates the upload items UI with better status badges
 function updateQueueUI() {
     const container = document.getElementById('uploadItems');
     const emptyMessage = document.getElementById('emptyQueueMessage');
@@ -324,29 +235,36 @@ function updateQueueUI() {
         // Add this task ID to our processed set
         processedTaskIds.add(task.id);
         
-        let statusClass = '';
+        let statusBadge = '';
         let statusIcon = '';
         let actionButton = '';
         
+        // Create enhanced status badge with better contrasting colors
         switch(task.status) {
             case 'completed':
-                statusClass = 'text-success';
-                statusIcon = '<i class="bi bi-check-circle-fill"></i>';
-                actionButton = `<a href="${task.video_url}" target="_blank" class="btn btn-sm btn-outline-primary"><i class="bi bi-youtube"></i> View</a>`;
+                statusIcon = '<i class="bi bi-check-circle-fill me-2"></i>';
+                statusBadge = `<span class="upload-status-badge status-completed">${statusIcon}Completed</span>`;
+                actionButton = `<a href="${task.video_url}" target="_blank" class="btn btn-sm btn-youtube">
+                                    <i class="bi bi-youtube me-1"></i> View
+                                </a>`;
                 break;
             case 'uploading':
-                statusClass = 'text-primary';
-                statusIcon = '<div class="loader"></div>';
-                actionButton = `<button class="btn btn-sm btn-outline-danger" onclick="cancelTask('${task.id}')"><i class="bi bi-x-circle"></i> Cancel</button>`;
+                statusIcon = '<div class="loader me-2"></div>';
+                statusBadge = `<span class="upload-status-badge status-uploading">${statusIcon}Uploading</span>`;
+                actionButton = `<button class="btn btn-sm btn-outline-danger" onclick="cancelTask('${task.id}')">
+                                    <i class="bi bi-x-circle me-1"></i> Cancel
+                                </button>`;
                 break;
             case 'pending':
-                statusClass = 'text-secondary';
-                statusIcon = '<i class="bi bi-hourglass"></i>';
-                actionButton = `<button class="btn btn-sm btn-outline-danger" onclick="cancelTask('${task.id}')"><i class="bi bi-x-circle"></i> Cancel</button>`;
+                statusIcon = '<i class="bi bi-hourglass me-2"></i>';
+                statusBadge = `<span class="upload-status-badge status-pending">${statusIcon}Pending</span>`;
+                actionButton = `<button class="btn btn-sm btn-outline-danger" onclick="cancelTask('${task.id}')">
+                                    <i class="bi bi-x-circle me-1"></i> Cancel
+                                </button>`;
                 break;
             case 'error':
-                statusClass = 'text-danger';
-                statusIcon = '<i class="bi bi-exclamation-circle-fill"></i>';
+                statusIcon = '<i class="bi bi-exclamation-circle-fill me-2"></i>';
+                statusBadge = `<span class="upload-status-badge status-error">${statusIcon}Error</span>`;
                 
                 // Create a tooltip for the error details
                 const errorMessage = task.error || 'Unknown error';
@@ -355,25 +273,40 @@ function updateQueueUI() {
                             data-bs-toggle="tooltip" 
                             data-bs-placement="top" 
                             title="${errorMessage}">
-                        <i class="bi bi-info-circle"></i> Details
+                        <i class="bi bi-info-circle me-1"></i> Details
                     </button>`;
                 break;
             case 'cancelled':
-                statusClass = 'text-muted';
-                statusIcon = '<i class="bi bi-x-circle-fill"></i>';
+                statusIcon = '<i class="bi bi-x-circle-fill me-2"></i>';
+                statusBadge = `<span class="upload-status-badge status-cancelled">${statusIcon}Cancelled</span>`;
                 actionButton = '';
                 break;
         }
         
-        const progressBar = task.status === 'uploading' ? 
-            `<div class="progress">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                    role="progressbar" 
-                    style="width: ${task.progress}%" 
-                    aria-valuenow="${task.progress}" 
-                    aria-valuemin="0" 
-                    aria-valuemax="100"></div>
-            </div>` : '';
+        // Enhanced progress bar with percentage text and current upload size
+        let progressBar = '';
+        if (task.status === 'uploading') {
+            // Calculate how much data has been uploaded based on progress percentage
+            const uploadedSize = Math.round((task.progress / 100) * task.file_size);
+            const uploadedSizeStr = formatFileSize(uploadedSize);
+            const totalSizeStr = formatFileSize(task.file_size);
+            
+            progressBar = `
+                <div class="upload-progress mt-2">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="small text-muted">${uploadedSizeStr} of ${totalSizeStr}</span>
+                        <span class="small fw-semibold">${task.progress}%</span>
+                    </div>
+                    <div class="progress" style="height: 12px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                            role="progressbar" 
+                            style="width: ${task.progress}%" 
+                            aria-valuenow="${task.progress}" 
+                            aria-valuemin="0" 
+                            aria-valuemax="100"></div>
+                    </div>
+                </div>`;
+        }
         
         const fileSize = formatFileSize(task.file_size);
         
@@ -382,18 +315,41 @@ function updateQueueUI() {
                 ${task.delete_success ? '<i class="bi bi-trash-fill me-1"></i> File deleted' : '<i class="bi bi-arrow-repeat me-1"></i> Attempting to delete file...'}
             </div>` : '';
         
+        // Add more details about upload timing if available
+        let timingInfo = '';
+        if (task.start_time) {
+            const startTime = new Date(task.start_time * 1000);
+            const startTimeStr = startTime.toLocaleTimeString();
+            
+            if (task.end_time && task.status === 'completed') {
+                const endTime = new Date(task.end_time * 1000);
+                const endTimeStr = endTime.toLocaleTimeString();
+                const duration = Math.round((task.end_time - task.start_time) / 60 * 10) / 10; // minutes with 1 decimal
+                
+                timingInfo = `<span class="small text-muted me-3">Completed in ${duration} min (${startTimeStr} - ${endTimeStr})</span>`;
+            } else if (task.status === 'uploading') {
+                const currentTime = new Date();
+                const elapsedMinutes = Math.round((currentTime - startTime) / 1000 / 60 * 10) / 10;
+                
+                timingInfo = `<span class="small text-muted me-3">Started at ${startTimeStr} (${elapsedMinutes} min elapsed)</span>`;
+            }
+        }
+        
+        // Build upload item with enhanced styling
         itemEl.innerHTML = `
             <div class="d-flex justify-content-between align-items-center">
                 <div class="d-flex align-items-center">
-                    <span class="${statusClass} me-3 fs-4">${statusIcon}</span>
+                    <div class="me-3">${statusBadge}</div>
                     <div>
-                        <div class="fw-bold">${task.filename}</div>
-                        <div class="small text-muted">${fileSize}</div>
+                        <div class="fw-bold text-truncate" style="max-width: 400px;" title="${task.filename}">${task.filename}</div>
+                        <div class="small text-muted d-flex align-items-center">
+                            <i class="bi bi-hdd me-1"></i> ${fileSize}
+                            ${timingInfo}
+                        </div>
                         ${deleteStatus}
                     </div>
                 </div>
-                <div class="d-flex align-items-center">
-                    <span class="me-3 ${statusClass} fw-semibold">${capitalizeFirstLetter(task.status)}</span>
+                <div>
                     ${actionButton}
                 </div>
             </div>
@@ -465,6 +421,51 @@ function clearCompletedUploads() {
     .catch(error => {
         console.error('Error clearing completed uploads:', error);
         showToast('Error', 'Error clearing completed uploads', 'danger');
+    });
+}
+
+// Add the new scan function
+// Scan folder once function
+function scanFolderOnce() {
+    console.log("Scanning folder once");
+    
+    // Show loading indicator on the button
+    const scanBtn = document.getElementById('scanFolderOnceBtn');
+    const originalText = scanBtn.innerHTML;
+    scanBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Scanning...';
+    scanBtn.disabled = true;
+    
+    fetch('/api/folder/scan', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Restore button
+        scanBtn.innerHTML = originalText;
+        scanBtn.disabled = false;
+        
+        if (data.success) {
+            console.log(`Scan completed: found ${data.scanned_count} videos`);
+            
+            if (data.scanned_count > 0) {
+                // Force immediate queue refresh
+                refreshQueue();
+                showToast('Success', `Scanned folder and found ${data.scanned_count} video files. Check the upload queue!`, 'success');
+            } else {
+                showToast('Info', 'No new video files were found in the folder', 'info');
+            }
+        } else {
+            console.error(`Failed to scan folder: ${data.error}`);
+            showToast('Error', 'Failed to scan folder: ' + (data.error || 'Unknown error'), 'danger');
+        }
+    })
+    .catch(error => {
+        // Restore button
+        scanBtn.innerHTML = originalText;
+        scanBtn.disabled = false;
+        
+        console.error('Error scanning folder:', error);
+        showToast('Error', 'Error scanning folder. Check console for details.', 'danger');
     });
 }
 
@@ -574,22 +575,22 @@ function updateStatusIndicator() {
     if (!isAuthenticated) {
         statusIndicator.innerHTML = `
             <span class="status-indicator status-warning"></span>
-            <span class="text-light">Not Authenticated</span>
+            <span class="text-light fw-medium">Not Authenticated</span>
         `;
     } else if (uploadLimitReached) {
         statusIndicator.innerHTML = `
             <span class="status-indicator status-warning"></span>
-            <span class="text-light">Upload Limit Reached</span>
+            <span class="text-light fw-medium">Upload Limit Reached</span>
         `;
     } else if (isMonitoring) {
         statusIndicator.innerHTML = `
             <span class="status-indicator status-active"></span>
-            <span class="text-light">Monitoring</span>
+            <span class="text-light fw-medium">Monitoring Active</span>
         `;
     } else {
         statusIndicator.innerHTML = `
             <span class="status-indicator status-inactive"></span>
-            <span class="text-light">Not Monitoring</span>
+            <span class="text-light fw-medium">Not Monitoring</span>
         `;
     }
 }
@@ -750,7 +751,7 @@ function loadChannels() {
                             <div class="list-group-item list-group-item-action ${isSelected ? 'active' : ''}" 
                                  id="channel-${channel.id}">
                                 <div class="d-flex align-items-center">
-                                    <img src="${channel.thumbnail}" alt="${channel.title}" class="me-3" style="width: 48px; height: 48px; border-radius: 50%;">
+                                    <img src="${channel.thumbnail}" alt="${channel.title}" class="me-3 channel-image" width="48" height="48">
                                     <div>
                                         <h6 class="mb-0">${channel.title}</h6>
                                         <small class="text-muted">Channel ID: ${channel.id}</small>

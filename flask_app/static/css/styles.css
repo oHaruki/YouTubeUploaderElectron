@@ -1,37 +1,56 @@
 :root {
     --primary-color: #3498db;
+    --primary-color-dark: #2980b9;
     --secondary-color: #2ecc71;
+    --secondary-color-dark: #27ae60;
     --danger-color: #e74c3c;
+    --danger-color-dark: #c0392b;
     --warning-color: #f39c12;
+    --warning-color-dark: #d35400;
     --background-color: #f8f9fa;
     --card-bg: #ffffff;
     --text-color: #333333;
+    --text-muted: #6c757d;
     --border-color: rgba(0,0,0,0.125);
     --hover-bg: #f0f0f0;
+    --navbar-bg: #2c3e50;
+    --navbar-darker: #1c2e40;
 }
 
 [data-bs-theme="dark"] {
     --primary-color: #3498db;
+    --primary-color-dark: #2980b9;
     --secondary-color: #2ecc71;
+    --secondary-color-dark: #27ae60;
     --danger-color: #e74c3c;
+    --danger-color-dark: #c0392b;
     --warning-color: #f39c12;
+    --warning-color-dark: #d35400;
     --background-color: #121212;
     --card-bg: #1e1e1e;
     --text-color: #f0f0f0;
+    --text-muted: #adb5bd;
     --border-color: rgba(255,255,255,0.125);
     --hover-bg: #2a2a2a;
+    --navbar-bg: #1a2530;
+    --navbar-darker: #0f1520;
 }
 
+/* Base Styles */
 body {
     background-color: var(--background-color);
     color: var(--text-color);
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     transition: background-color 0.3s ease, color 0.3s ease;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
+/* Improved Card Styles */
 .card {
     border-radius: 12px;
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
     margin-bottom: 24px;
     border: 1px solid var(--border-color);
     background-color: var(--card-bg);
@@ -41,26 +60,35 @@ body {
 
 .card:hover {
     transform: translateY(-5px);
-    box-shadow: 0 12px 16px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 12px 20px rgba(0, 0, 0, 0.15);
 }
 
 .card-header {
     background-color: var(--primary-color);
     color: white;
     border-radius: 12px 12px 0 0 !important;
-    font-weight: bold;
+    font-weight: 600;
     padding: 16px 20px;
+    display: flex;
+    align-items: center;
+}
+
+.card-header i {
+    margin-right: 8px;
+    font-size: 1.2rem;
 }
 
 .card-body {
     padding: 20px;
 }
 
+/* Enhanced Button Styles */
 .btn {
     border-radius: 8px;
     font-weight: 500;
     padding: 8px 16px;
     transition: all 0.2s ease;
+    letter-spacing: 0.3px;
 }
 
 .btn-primary {
@@ -68,9 +96,23 @@ body {
     border-color: var(--primary-color);
 }
 
+.btn-primary:hover, .btn-primary:focus {
+    background-color: var(--primary-color-dark);
+    border-color: var(--primary-color-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
 .btn-success {
     background-color: var(--secondary-color);
     border-color: var(--secondary-color);
+}
+
+.btn-success:hover, .btn-success:focus {
+    background-color: var(--secondary-color-dark);
+    border-color: var(--secondary-color-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .btn-danger {
@@ -78,7 +120,9 @@ body {
     border-color: var(--danger-color);
 }
 
-.btn:hover {
+.btn-danger:hover, .btn-danger:focus {
+    background-color: var(--danger-color-dark);
+    border-color: var(--danger-color-dark);
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
@@ -87,26 +131,50 @@ body {
     transform: translateY(0);
 }
 
+/* YouTube branded button */
+.btn-youtube {
+    background-color: #ff0000;
+    border-color: #ff0000;
+    color: white !important;
+}
+
+.btn-youtube:hover, .btn-youtube:focus {
+    background-color: #cc0000;
+    border-color: #cc0000;
+    color: white !important;
+}
+
+/* Improved Navbar */
 .navbar {
-    background-color: #2c3e50;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    background: linear-gradient(135deg, var(--navbar-bg), var(--navbar-darker));
+    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.15);
     padding: 12px 0;
     margin-bottom: 30px;
 }
 
 .navbar-brand {
-    font-weight: bold;
+    font-weight: 600;
     font-size: 22px;
     color: white !important;
+    display: flex;
+    align-items: center;
 }
 
+.navbar-brand i {
+    margin-right: 10px;
+    font-size: 1.4rem;
+    color: #ff0000; /* YouTube red color */
+}
+
+/* Enhanced Upload Items with Dark Mode Support */
 .upload-item {
-    border-radius: 10px;
+    border-radius: 12px;
     margin-bottom: 15px;
     background-color: var(--card-bg);
     transition: all 0.3s ease;
     border: 1px solid var(--border-color);
     overflow: hidden;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
 }
 
 .upload-item:hover {
@@ -114,14 +182,72 @@ body {
     box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
 }
 
+/* Queue stats with dark mode support */
+#queueStats {
+    border-radius: 8px;
+    padding: 10px 15px;
+    font-size: 0.9rem;
+}
+
+[data-bs-theme="light"] #queueStats {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+[data-bs-theme="dark"] #queueStats {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Enhanced Progress Bar */
 .progress {
-    height: 10px;
+    height: 12px;
     margin-top: 10px;
-    border-radius: 5px;
+    border-radius: 6px;
     overflow: hidden;
     background-color: var(--hover-bg);
 }
 
+.progress-bar {
+    background-color: var(--primary-color);
+    transition: width 0.3s ease;
+}
+
+/* Upload progress container */
+.upload-progress {
+    margin-top: 12px;
+}
+
+/* Status badges with better contrast */
+.upload-status-badge {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-weight: 500;
+    color: white;
+    text-align: center;
+    min-width: 100px;
+}
+
+.status-uploading {
+    background-color: #2980b9;
+}
+
+.status-completed {
+    background-color: #27ae60;
+}
+
+.status-pending {
+    background-color: #7f8c8d;
+}
+
+.status-error {
+    background-color: #c0392b;
+}
+
+.status-cancelled {
+    background-color: #95a5a6;
+}
+
+/* Folder browser styling */
 .folder-browser {
     max-height: 300px;
     overflow-y: auto;
@@ -142,6 +268,7 @@ body {
     background-color: var(--hover-bg);
 }
 
+/* Status indicators with glow effect */
 .status-indicator {
     width: 12px;
     height: 12px;
@@ -149,23 +276,53 @@ body {
     display: inline-block;
     margin-right: 8px;
     transition: all 0.3s ease;
+    position: relative;
+}
+
+.status-indicator::after {
+    content: '';
+    position: absolute;
+    top: -3px;
+    left: -3px;
+    right: -3px;
+    bottom: -3px;
+    border-radius: 50%;
+    z-index: -1;
+    opacity: 0.6;
+    animation: pulse 2s infinite;
 }
 
 .status-active {
     background-color: var(--secondary-color);
-    box-shadow: 0 0 8px var(--secondary-color);
+}
+
+.status-active::after {
+    background-color: var(--secondary-color);
 }
 
 .status-inactive {
     background-color: var(--danger-color);
-    box-shadow: 0 0 8px var(--danger-color);
+}
+
+.status-inactive::after {
+    background-color: var(--danger-color);
 }
 
 .status-warning {
     background-color: var(--warning-color);
-    box-shadow: 0 0 8px var(--warning-color);
 }
 
+.status-warning::after {
+    background-color: var(--warning-color);
+}
+
+@keyframes pulse {
+    0% { transform: scale(0.95); opacity: 0.7; }
+    50% { transform: scale(1.2); opacity: 0.3; }
+    100% { transform: scale(0.95); opacity: 0.7; }
+}
+
+/* Tabs styling */
 .tab-content {
     padding: 20px 0;
 }
@@ -180,6 +337,7 @@ body {
     border-bottom: none;
 }
 
+/* Improved loader animation */
 .loader {
     border: 3px solid var(--hover-bg);
     border-radius: 50%;
@@ -196,6 +354,7 @@ body {
     100% { transform: rotate(360deg); }
 }
 
+/* Form controls with improved styling */
 .form-control, .form-select {
     background-color: var(--card-bg);
     color: var(--text-color);
@@ -212,6 +371,7 @@ body {
     color: var(--text-color);
 }
 
+/* Enhanced Tab Navigation */
 .nav-tabs {
     border-bottom: 1px solid var(--border-color);
 }
@@ -229,19 +389,76 @@ body {
 
 .nav-tabs .nav-link:hover {
     border-bottom: 3px solid rgba(52, 152, 219, 0.5);
+    background-color: var(--hover-bg);
 }
 
 .nav-tabs .nav-link.active {
     color: var(--primary-color);
     background-color: transparent;
     border-bottom: 3px solid var(--primary-color);
+    font-weight: 600;
 }
 
+.nav-tabs .nav-link i {
+    margin-right: 6px;
+}
+
+/* Improved Alert Styling with Better Contrast */
 .alert {
     border-radius: 10px;
     padding: 15px 20px;
+    border: none;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    margin-bottom: 20px;
 }
 
+/* Standard alert variants with better contrast */
+.alert-info {
+    background-color: rgba(52, 152, 219, 0.15);
+    color: var(--primary-color-dark);
+    border-left: 4px solid var(--primary-color);
+}
+
+.alert-warning {
+    background-color: rgba(243, 156, 18, 0.15);
+    color: #8a4500; /* Darker orange text for better contrast */
+    border-left: 4px solid var(--warning-color);
+}
+
+/* Dark mode adjustments for warning alerts */
+[data-bs-theme="dark"] .alert-warning {
+    background-color: rgba(243, 156, 18, 0.2);
+    color: #ffcf77; /* Lighter text for dark mode */
+    border-left: 4px solid var(--warning-color);
+}
+
+.alert-danger {
+    background-color: rgba(231, 76, 60, 0.15);
+    color: var(--danger-color-dark);
+    border-left: 4px solid var(--danger-color);
+}
+
+.alert-success {
+    background-color: rgba(46, 204, 113, 0.15);
+    color: var(--secondary-color-dark);
+    border-left: 4px solid var(--secondary-color);
+}
+
+/* Special contrast alert for API warning */
+.alert-api-warning {
+    background-color: #3d2700; /* Dark brown background */
+    color: #ffc107; /* Bright yellow text */
+    border-left: 4px solid #ff9800;
+}
+
+/* Enhanced alert icons */
+.alert i.bi {
+    font-size: 1.2em;
+    margin-right: 10px;
+    vertical-align: middle;
+}
+
+/* Theme toggle button */
 .theme-toggle {
     background: transparent;
     border: none;
@@ -250,13 +467,20 @@ body {
     cursor: pointer;
     margin-right: 15px;
     transition: all 0.3s ease;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
 }
 
 .theme-toggle:hover {
     transform: rotate(30deg);
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
-/* For dark mode text readability */
+/* Dark mode text improvements */
 [data-bs-theme="dark"] .text-muted {
     color: #adb5bd !important;
 }
@@ -267,6 +491,7 @@ body {
     border: none;
     background-color: var(--card-bg);
     color: var(--text-color);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
 }
 
 .modal-header {
@@ -279,15 +504,21 @@ body {
     padding: 20px;
 }
 
-/* Channel and project cards */
+/* List group improvements */
 .list-group-item {
     background-color: var(--card-bg);
     color: var(--text-color);
     border-color: var(--border-color);
+    transition: all 0.2s ease;
 }
 
 .list-group-item:hover {
     background-color: var(--hover-bg);
+}
+
+.list-group-item.active {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
 }
 
 /* Scrollbar styling */
@@ -307,12 +538,31 @@ body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #2980b9;
+    background: var(--primary-color-dark);
 }
 
 /* Table styling */
 .table {
     color: var(--text-color);
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.table thead th {
+    background-color: rgba(52, 152, 219, 0.1);
+    border: none;
+    padding: 12px 15px;
+}
+
+.table tbody td {
+    padding: 12px 15px;
+    vertical-align: middle;
+}
+
+.table tbody tr:hover {
+    background-color: var(--hover-bg);
 }
 
 /* Animation for new items */
@@ -346,8 +596,209 @@ body {
     animation: pulse 2s infinite;
 }
 
-@keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-    100% { transform: scale(1); }
+/* Toast improvements */
+.toast-container {
+    z-index: 1070;
+}
+
+.toast {
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+}
+
+/* Enhanced badge styling */
+.badge {
+    padding: 6px 10px;
+    font-weight: 500;
+    border-radius: 6px;
+    text-transform: capitalize;
+}
+
+/* Enhanced status badges for dark mode */
+.badge.bg-primary, 
+.badge.bg-success,
+.badge.bg-danger,
+.badge.bg-warning,
+.badge.bg-info {
+    color: white !important;
+    font-weight: 500;
+}
+
+/* Ensure the "Uploading" status has proper contrast */
+.upload-status {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: 500;
+    background-color: var(--primary-color);
+    color: white !important;
+    display: inline-block;
+}
+
+/* Footer styling */
+footer {
+    margin-top: auto;
+    padding: 15px 0;
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+/* Channel list styling */
+.channel-image {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--primary-color);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* Stats box styling */
+.stats-box {
+    background-color: var(--card-bg);
+    border-radius: 10px;
+    padding: 15px;
+    text-align: center;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+.stats-box:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+}
+
+.stats-box .icon {
+    font-size: 2rem;
+    margin-bottom: 10px;
+    color: var(--primary-color);
+}
+
+.stats-box .count {
+    font-size: 1.8rem;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.stats-box .label {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+/* Code highlight for better readability */
+.code-highlight {
+    background-color: rgba(0, 0, 0, 0.1);
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+[data-bs-theme="dark"] .code-highlight {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #f8f9fa;
+}
+
+/* New Project Card - Dark Mode Compatible */
+.new-project-card {
+    background-color: var(--card-bg) !important;
+    border: 1px solid var(--border-color);
+}
+
+[data-bs-theme="dark"] .new-project-card {
+    background-color: #2a2a2a !important;
+}
+
+/* Fix for white text on white background in light mode */
+[data-bs-theme="light"] .badge.bg-light,
+[data-bs-theme="light"] .bg-light.text-white {
+    color: var(--text-color) !important;
+}
+
+/* Dark cards in dark mode */
+[data-bs-theme="dark"] .card.bg-light {
+    background-color: var(--card-bg) !important;
+}
+
+/* Additional Dark Mode Fixes */
+
+/* Ensure bg-light elements respect dark mode */
+[data-bs-theme="dark"] .bg-light {
+    background-color: #2a2a2a !important;
+}
+
+/* Fix for the file input in dark mode */
+[data-bs-theme="dark"] .form-control[type="file"] {
+    color: var(--text-color);
+}
+
+/* Ensure input group text respects dark mode */
+[data-bs-theme="dark"] .input-group-text {
+    background-color: #2a2a2a;
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+/* Custom YouTube color for branding elements */
+.youtube-red {
+    color: #ff0000 !important;
+}
+
+.youtube-icon {
+    color: #ff0000;
+    font-size: 1.2em;
+}
+
+/* Fix tooltip text color to ensure readability */
+.tooltip {
+    --bs-tooltip-color: white;
+    --bs-tooltip-bg: rgba(0, 0, 0, 0.9);
+}
+
+/* Make code blocks more readable in dark mode */
+[data-bs-theme="dark"] code {
+    background-color: #1a1a1a;
+    color: #e9ecef;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+/* Better header styling for dark mode */
+[data-bs-theme="dark"] .navbar {
+    background: linear-gradient(135deg, #1a1a1a, #000000);
+}
+
+/* Fix form validation styling */
+.was-validated .form-control:valid, 
+.form-control.is-valid {
+    border-color: var(--secondary-color) !important;
+    background-color: var(--card-bg) !important;
+}
+
+.was-validated .form-control:invalid, 
+.form-control.is-invalid {
+    border-color: var(--danger-color) !important;
+    background-color: var(--card-bg) !important;
+}
+
+/* Toast background in dark mode */
+[data-bs-theme="dark"] .toast {
+    background-color: #2a2a2a;
+}
+
+/* Ensure form controls maintain proper dark mode styling */
+[data-bs-theme="dark"] .form-control:disabled,
+[data-bs-theme="dark"] .form-control[readonly] {
+    background-color: #1a1a1a;
+    color: #adb5bd;
+}
+
+/* Tabs styling with better contrast in dark mode */
+[data-bs-theme="dark"] .nav-tabs .nav-link {
+    color: #e9ecef;
+}
+
+[data-bs-theme="dark"] .nav-tabs .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.05);
 }

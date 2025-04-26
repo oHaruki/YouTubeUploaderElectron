@@ -7,33 +7,47 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <!-- Enhanced NavBar with Logo and Gradients -->
     <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container">
-            <a class="navbar-brand" href="#"><i class="bi bi-youtube me-2"></i>YouTube Auto Uploader</a>
-            <div class="d-flex align-items-center">
-                <button id="themeToggleBtn" class="theme-toggle">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-youtube"></i>
+                <span>YouTube Auto Uploader</span>
+                {% if is_authenticated %}
+                <span class="badge bg-success ms-2 fs-8">Authenticated</span>
+                {% endif %}
+            </a>
+            <div class="d-flex align-items-center gap-3">
+                <!-- Status Badge with Enhanced Style -->
+                <div id="statusIndicator" class="d-flex align-items-center px-3 py-2 rounded-pill" 
+                    style="background-color: rgba(0,0,0,0.2); backdrop-filter: blur(10px);">
+                    {% if is_authenticated %}
+                        {% if is_monitoring %}
+                            <span class="status-indicator status-active"></span>
+                            <span class="text-light fw-medium">Monitoring Active</span>
+                        {% else %}
+                            <span class="status-indicator status-inactive"></span>
+                            <span class="text-light fw-medium">Not Monitoring</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="status-indicator status-warning"></span>
+                        <span class="text-light fw-medium">Not Authenticated</span>
+                    {% endif %}
+                </div>
+                
+                <!-- Theme Toggle Button with better styling -->
+                <button id="themeToggleBtn" class="theme-toggle" aria-label="Toggle theme">
                     {% if config.theme == 'dark' %}
                         <i class="bi bi-sun-fill"></i>
                     {% else %}
                         <i class="bi bi-moon-fill"></i>
                     {% endif %}
                 </button>
-                <div id="statusIndicator">
-                    {% if is_authenticated %}
-                        {% if is_monitoring %}
-                            <span class="status-indicator status-active"></span>
-                            <span class="text-light">Monitoring</span>
-                        {% else %}
-                            <span class="status-indicator status-inactive"></span>
-                            <span class="text-light">Not Monitoring</span>
-                        {% endif %}
-                    {% else %}
-                        <span class="status-indicator status-warning"></span>
-                        <span class="text-light">Not Authenticated</span>
-                    {% endif %}
-                </div>
             </div>
         </div>
     </nav>
@@ -41,19 +55,23 @@
     <div class="container">
         <div class="row">
             <div class="col-md-12">
+                <!-- Authentication Warning Banner -->
                 {% if not is_authenticated %}
-    <div class="alert alert-warning fade-in" id="authWarningBanner">
-        <div class="d-flex align-items-center">
-            <i class="bi bi-exclamation-triangle fs-3 me-3"></i>
-            <div>
-                <h5 class="mb-1">Authentication Required</h5>
-                <p class="mb-0">You need to authenticate with YouTube to use this application.</p>
-            </div>
-            <a href="/auth" class="btn btn-primary ms-auto">Authenticate Now</a>
-        </div>
-    </div>
-{% endif %}
+                <div class="alert alert-warning fade-in" id="authWarningBanner">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-exclamation-triangle fs-3 me-3"></i>
+                        <div>
+                            <h5 class="mb-1">Authentication Required</h5>
+                            <p class="mb-0">You need to authenticate with YouTube to use this application.</p>
+                        </div>
+                        <a href="/auth" class="btn btn-primary ms-auto">
+                            <i class="bi bi-key me-2"></i>Authenticate Now
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
 
+                <!-- Upload Limit Warning -->
                 {% if upload_limit_reached %}
                     <div class="alert alert-danger fade-in">
                         <div class="d-flex align-items-center">
@@ -61,41 +79,43 @@
                             <div>
                                 <h5 class="mb-1">Upload Limit Reached</h5>
                                 <p class="mb-0">YouTube upload limit reached! Please wait before uploading more videos.</p>
-                                <p class="mb-0" id="limitResetTime" data-time="{{ upload_limit_reset_time }}"></p>
+                                <p class="mb-0 fw-bold" id="limitResetTime" data-time="{{ upload_limit_reset_time }}"></p>
                             </div>
                         </div>
                     </div>
                 {% endif %}
 
+                <!-- Main Tabs Navigation with Enhanced Icons -->
                 <ul class="nav nav-tabs" id="mainTabs" role="tablist">
                     <li class="nav-item" role="presentation">
                         <button class="nav-link active" id="uploads-tab" data-bs-toggle="tab" data-bs-target="#uploads-tab-pane" type="button" role="tab" aria-controls="uploads-tab-pane" aria-selected="true">
-                            <i class="bi bi-cloud-upload me-1"></i> Uploads
+                            <i class="bi bi-cloud-upload"></i> Uploads
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings-tab-pane" type="button" role="tab" aria-controls="settings-tab-pane" aria-selected="false">
-                            <i class="bi bi-gear me-1"></i> Settings
+                            <i class="bi bi-gear"></i> Settings
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="api-projects-tab" data-bs-toggle="tab" data-bs-target="#api-projects-tab-pane" type="button" role="tab" aria-controls="api-projects-tab-pane" aria-selected="false">
-                            <i class="bi bi-key me-1"></i> API Projects
+                            <i class="bi bi-key"></i> API Projects
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="about-tab" data-bs-toggle="tab" data-bs-target="#about-tab-pane" type="button" role="tab" aria-controls="about-tab-pane" aria-selected="false">
-                            <i class="bi bi-info-circle me-1"></i> About
+                            <i class="bi bi-info-circle"></i> About
                         </button>
                     </li>
                 </ul>
 
                 <div class="tab-content" id="mainTabsContent">
-                    <!-- Uploads Tab -->
+                    <!-- Uploads Tab with Improved Card Styling -->
                     <div class="tab-pane fade show active" id="uploads-tab-pane" role="tabpanel" aria-labelledby="uploads-tab" tabindex="0">
                         <div class="card fade-in">
-                            <div class="card-header d-flex justify-content-between align-items-center">
-                                <span><i class="bi bi-folder me-2"></i>Folder to Monitor</span>
+                            <div class="card-header">
+                                <i class="bi bi-folder"></i>
+                                <span>Folder to Monitor</span>
                             </div>
                             <div class="card-body">
                                 <div class="alert alert-info mb-3">
@@ -104,6 +124,7 @@
                                 </div>
                                 
                                 <div class="input-group mb-3">
+                                    <span class="input-group-text"><i class="bi bi-folder2-open"></i></span>
                                     <input type="text" class="form-control" id="watchFolderPath" value="{{ config.watch_folder }}" placeholder="Enter the complete folder path (e.g., C:\Users\YourName\Videos\Folder)">
                                     <button class="btn btn-success" type="button" id="saveFolderBtn">
                                         <i class="bi bi-save me-1"></i> Save
@@ -115,11 +136,11 @@
                                     <!-- Folder validation status will appear here -->
                                 </div>
                                 
-                                <div class="d-flex justify-content-center mt-4">
-                                    <button id="startMonitoringBtn" class="btn btn-success me-3" {% if not is_authenticated or is_monitoring %}disabled{% endif %}>
+                                <div class="d-flex justify-content-center mt-4 gap-3">
+                                    <button id="startMonitoringBtn" class="btn btn-success" {% if not is_authenticated or is_monitoring %}disabled{% endif %}>
                                         <i class="bi bi-play-fill me-1"></i> Start Monitoring
                                     </button>
-                                    <button id="stopMonitoringBtn" class="btn btn-danger me-3" {% if not is_authenticated or not is_monitoring %}disabled{% endif %}>
+                                    <button id="stopMonitoringBtn" class="btn btn-danger" {% if not is_authenticated or not is_monitoring %}disabled{% endif %}>
                                         <i class="bi bi-stop-fill me-1"></i> Stop Monitoring
                                     </button>
                                     <button id="scanFolderOnceBtn" class="btn btn-primary" {% if not is_authenticated %}disabled{% endif %}>
@@ -129,9 +150,13 @@
                             </div>
                         </div>
 
+                        <!-- Upload Queue Card with Improved Header -->
                         <div class="card fade-in">
                             <div class="card-header d-flex justify-content-between align-items-center">
-                                <span><i class="bi bi-list-ul me-2"></i>Upload Queue</span>
+                                <div>
+                                    <i class="bi bi-list-ul"></i>
+                                    <span>Upload Queue</span>
+                                </div>
                                 <button id="clearCompletedBtn" class="btn btn-sm btn-outline-light">
                                     <i class="bi bi-trash me-1"></i> Clear Completed
                                 </button>
@@ -140,12 +165,17 @@
                                 <div id="uploadQueueContainer" class="mb-3">
                                     <div class="text-center text-muted py-4" id="emptyQueueMessage">
                                         <i class="bi bi-inbox fs-3 d-block mb-2"></i>
-                                        No uploads in queue
+                                        <p>No uploads in queue</p>
+                                        <small class="text-muted">Add videos to your watch folder to start uploading</small>
                                     </div>
-                                    <div id="uploadItems"></div>
+                                    <div id="uploadItems">
+                                        <!-- Upload items will be displayed here -->
+                                    </div>
                                 </div>
-                                <div id="queueStats" class="text-end text-muted small d-none">
-                                    <span id="statsText">Uploads: 0 completed, 0 pending, 0 uploading, 0 failed</span>
+                                
+                                <!-- Queue stats display with badge styling -->
+                                <div id="queueStats" class="d-flex justify-content-end align-items-center mt-3 py-2 px-3 rounded d-none">
+                                    <span id="statsText" class="fw-medium">Uploads: 0 completed, 0 pending, 0 uploading, 0 failed</span>
                                 </div>
                             </div>
                         </div>
@@ -155,7 +185,8 @@
                     <div class="tab-pane fade" id="settings-tab-pane" role="tabpanel" aria-labelledby="settings-tab" tabindex="0">
                         <div class="card fade-in">
                             <div class="card-header">
-                                <i class="bi bi-sliders me-2"></i>Upload Settings
+                                <i class="bi bi-sliders"></i>
+                                <span>Upload Settings</span>
                             </div>
                             <div class="card-body">
                                 <form id="settingsForm">
@@ -195,35 +226,50 @@
                                         <h5 class="mb-3">Video Details</h5>
                                         <div class="mb-3">
                                             <label for="titleTemplate" class="form-label">Title Template</label>
-                                            <input type="text" class="form-control" id="titleTemplate" value="{{ config.title_template }}" 
-                                                placeholder="Use {filename} to insert the original filename">
+                                            <div class="input-group">
+                                                <span class="input-group-text"><i class="bi bi-type"></i></span>
+                                                <input type="text" class="form-control" id="titleTemplate" value="{{ config.title_template }}" 
+                                                    placeholder="Use {filename} to insert the original filename">
+                                            </div>
                                             <div class="form-text">Use {filename} as a placeholder for the original filename.</div>
                                         </div>
                                         <div class="mb-3">
                                             <label for="description" class="form-label">Description</label>
-                                            <textarea class="form-control" id="description" rows="3">{{ config.description }}</textarea>
+                                            <div class="input-group">
+                                                <span class="input-group-text"><i class="bi bi-file-text"></i></span>
+                                                <textarea class="form-control" id="description" rows="3">{{ config.description }}</textarea>
+                                            </div>
                                         </div>
                                         <div class="mb-3">
                                             <label for="tags" class="form-label">Tags (comma separated)</label>
-                                            <input type="text" class="form-control" id="tags" value="{{ config.tags }}">
+                                            <div class="input-group">
+                                                <span class="input-group-text"><i class="bi bi-tags"></i></span>
+                                                <input type="text" class="form-control" id="tags" value="{{ config.tags }}">
+                                            </div>
                                         </div>
                                         <div class="mb-3">
                                             <label class="form-label">Privacy Setting</label>
-                                            <div class="d-flex">
-                                                <div class="form-check me-3">
+                                            <div class="d-flex gap-3">
+                                                <div class="form-check">
                                                     <input class="form-check-input" type="radio" name="privacySetting" id="privacyPublic" value="public" 
                                                         {% if config.privacy == 'public' %}checked{% endif %}>
-                                                    <label class="form-check-label" for="privacyPublic">Public</label>
+                                                    <label class="form-check-label" for="privacyPublic">
+                                                        <i class="bi bi-globe me-1 text-primary"></i> Public
+                                                    </label>
                                                 </div>
-                                                <div class="form-check me-3">
+                                                <div class="form-check">
                                                     <input class="form-check-input" type="radio" name="privacySetting" id="privacyUnlisted" value="unlisted" 
                                                         {% if config.privacy == 'unlisted' %}checked{% endif %}>
-                                                    <label class="form-check-label" for="privacyUnlisted">Unlisted</label>
+                                                    <label class="form-check-label" for="privacyUnlisted">
+                                                        <i class="bi bi-eye-slash me-1 text-secondary"></i> Unlisted
+                                                    </label>
                                                 </div>
                                                 <div class="form-check">
                                                     <input class="form-check-input" type="radio" name="privacySetting" id="privacyPrivate" value="private" 
                                                         {% if config.privacy == 'private' %}checked{% endif %}>
-                                                    <label class="form-check-label" for="privacyPrivate">Private</label>
+                                                    <label class="form-check-label" for="privacyPrivate">
+                                                        <i class="bi bi-lock me-1 text-danger"></i> Private
+                                                    </label>
                                                 </div>
                                             </div>
                                         </div>
@@ -234,32 +280,48 @@
                                         <div class="form-check form-switch mb-3">
                                             <input class="form-check-input" type="checkbox" id="deleteAfterUpload" 
                                                 {% if config.delete_after_upload %}checked{% endif %}>
-                                            <label class="form-check-label" for="deleteAfterUpload">Delete files after successful upload</label>
+                                            <label class="form-check-label" for="deleteAfterUpload">
+                                                <i class="bi bi-trash me-2 text-danger"></i>Delete files after successful upload
+                                            </label>
                                         </div>
                                         <div class="form-check form-switch mb-3">
                                             <input class="form-check-input" type="checkbox" id="checkExistingFiles" 
                                                 {% if config.check_existing_files %}checked{% endif %}>
-                                            <label class="form-check-label" for="checkExistingFiles">Process existing files when starting monitoring</label>
+                                            <label class="form-check-label" for="checkExistingFiles">
+                                                <i class="bi bi-folder-check me-2 text-success"></i>Process existing files when starting monitoring
+                                            </label>
                                         </div>
                                         <div class="row mb-3">
                                             <div class="col-md-6">
                                                 <label for="maxRetries" class="form-label">Maximum Retry Attempts</label>
-                                                <input type="number" class="form-control" id="maxRetries" min="1" max="10" value="{{ config.max_retries }}">
+                                                <div class="input-group">
+                                                    <span class="input-group-text"><i class="bi bi-arrow-repeat"></i></span>
+                                                    <input type="number" class="form-control" id="maxRetries" min="1" max="10" value="{{ config.max_retries }}">
+                                                </div>
                                             </div>
                                             <div class="col-md-6">
                                                 <label for="uploadLimitDuration" class="form-label">Upload Limit Reset (hours)</label>
-                                                <input type="number" class="form-control" id="uploadLimitDuration" min="1" max="48" value="{{ config.upload_limit_duration }}">
+                                                <div class="input-group">
+                                                    <span class="input-group-text"><i class="bi bi-hourglass-split"></i></span>
+                                                    <input type="number" class="form-control" id="uploadLimitDuration" min="1" max="48" value="{{ config.upload_limit_duration }}">
+                                                </div>
                                                 <div class="form-text">Time to wait after hitting YouTube's upload limit.</div>
                                             </div>
                                         </div>
                                         <div class="row">
                                             <div class="col-md-6">
                                                 <label for="deleteRetryCount" class="form-label">File Deletion Retry Count</label>
-                                                <input type="number" class="form-control" id="deleteRetryCount" min="1" max="20" value="{{ config.delete_retry_count }}">
+                                                <div class="input-group">
+                                                    <span class="input-group-text"><i class="bi bi-trash"></i></span>
+                                                    <input type="number" class="form-control" id="deleteRetryCount" min="1" max="20" value="{{ config.delete_retry_count }}">
+                                                </div>
                                             </div>
                                             <div class="col-md-6">
                                                 <label for="deleteRetryDelay" class="form-label">Delete Retry Delay (seconds)</label>
-                                                <input type="number" class="form-control" id="deleteRetryDelay" min="1" max="30" value="{{ config.delete_retry_delay }}">
+                                                <div class="input-group">
+                                                    <span class="input-group-text"><i class="bi bi-clock"></i></span>
+                                                    <input type="number" class="form-control" id="deleteRetryDelay" min="1" max="30" value="{{ config.delete_retry_delay }}">
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -278,15 +340,17 @@
                     <div class="tab-pane fade" id="api-projects-tab-pane" role="tabpanel" aria-labelledby="api-projects-tab" tabindex="0">
                         <div class="card fade-in">
                             <div class="card-header">
-                                <i class="bi bi-key me-2"></i>YouTube API Projects
+                                <i class="bi bi-key"></i>
+                                <span>YouTube API Projects</span>
                             </div>
                             <div class="card-body">
-                                <div class="alert alert-info">
+                                <!-- API Rotation Warning with Enhanced Contrast -->
+                                <div class="alert alert-api-warning">
                                     <div class="d-flex">
-                                        <i class="bi bi-info-circle fs-3 me-3"></i>
+                                        <i class="bi bi-exclamation-triangle fs-3 me-3"></i>
                                         <div>
-                                            <h5 class="mb-1">Increase Your Upload Capacity</h5>
-                                            <p class="mb-0"><strong>Multiple API projects help overcome YouTube API limits.</strong> Each Google Cloud project gives you a separate upload quota. Upload limits are per API project, not per channel.</p>
+                                            <h5 class="mb-1">Automatic API Rotation</h5>
+                                            <p class="mb-0">When you hit YouTube's upload limit with one API project, the app will automatically try to use another authenticated project.</p>
                                         </div>
                                     </div>
                                 </div>
@@ -308,16 +372,19 @@
                                     </div>
                                 </div>
                                 
-                                <div class="card bg-light mb-4">
+                                <!-- Project addition with dark mode compatibility -->
+                                <div class="card new-project-card mb-4">
                                     <div class="card-body">
-                                        <h5 class="card-title"><i class="bi bi-plus-circle me-2"></i>Add New API Project</h5>
+                                        <h5 class="card-title">
+                                            <i class="bi bi-plus-circle me-2 text-success"></i>Add New API Project
+                                        </h5>
                                         <p>To add a new API project, follow these steps:</p>
                                         <ol>
                                             <li>Go to the <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></li>
                                             <li>Create a new project</li>
                                             <li>Enable the YouTube Data API v3</li>
                                             <li>Create OAuth credentials (Web application type)</li>
-                                            <li>Add <code>http://localhost:5000/oauth2callback/project/YOUR_PROJECT_ID</code> as an authorized redirect URI</li>
+                                            <li>Add <code class="code-highlight">http://localhost:5000/oauth2callback/project/YOUR_PROJECT_ID</code> as an authorized redirect URI</li>
                                             <li>Download the credentials JSON file</li>
                                             <li>Upload it below</li>
                                         </ol>
@@ -333,16 +400,6 @@
                                         </form>
                                     </div>
                                 </div>
-                                
-                                <div class="alert alert-warning">
-                                    <div class="d-flex">
-                                        <i class="bi bi-exclamation-triangle fs-3 me-3"></i>
-                                        <div>
-                                            <h5 class="mb-1">Automatic API Rotation</h5>
-                                            <p class="mb-0">When you hit YouTube's upload limit with one API project, the app will automatically try to use another authenticated project.</p>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -351,19 +408,23 @@
                     <div class="tab-pane fade" id="about-tab-pane" role="tabpanel" aria-labelledby="about-tab" tabindex="0">
                         <div class="card fade-in">
                             <div class="card-header">
-                                <i class="bi bi-info-circle me-2"></i>About
+                                <i class="bi bi-info-circle"></i>
+                                <span>About</span>
                             </div>
                             <div class="card-body">
                                 <div class="text-center mb-4">
-                                    <h3>YouTube Auto Uploader</h3>
+                                    <i class="bi bi-youtube text-danger" style="font-size: 2.5rem;"></i>
+                                    <h3 class="mt-2">YouTube Auto Uploader</h3>
                                     <p class="lead">Automatically upload gameplay videos to YouTube</p>
                                 </div>
                                 
                                 <div class="row">
                                     <div class="col-md-6">
-                                        <div class="card mb-3">
+                                        <div class="card mb-3 h-100">
                                             <div class="card-body">
-                                                <h5><i class="bi bi-check-circle text-success me-2"></i>Features</h5>
+                                                <h5>
+                                                    <i class="bi bi-check-circle text-success me-2"></i>Features
+                                                </h5>
                                                 <ul>
                                                     <li>Automatic video uploading from a watch folder</li>
                                                     <li>Customizable video metadata (title, description, tags)</li>
@@ -377,9 +438,11 @@
                                         </div>
                                     </div>
                                     <div class="col-md-6">
-                                        <div class="card">
+                                        <div class="card h-100">
                                             <div class="card-body">
-                                                <h5><i class="bi bi-question-circle text-primary me-2"></i>Getting Started</h5>
+                                                <h5>
+                                                    <i class="bi bi-question-circle text-primary me-2"></i>Getting Started
+                                                </h5>
                                                 <ol>
                                                     <li>Authenticate with your YouTube account</li>
                                                     <li>Select the folder to monitor for videos</li>
@@ -407,12 +470,14 @@
                         <!-- Current Version Info -->
                         <div class="card mt-4 fade-in">
                             <div class="card-header">
-                                <i class="bi bi-tag me-2"></i>Version Information
+                                <i class="bi bi-tag"></i>
+                                <span>Version Information</span>
                             </div>
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
-                                        <strong>Current Version:</strong> <span id="currentVersionText">{{ config.version|default('0.2.0') }}</span>
+                                        <strong>Current Version:</strong> 
+                                        <span id="currentVersionText" class="badge bg-primary ms-2">{{ config.version|default('1.1.0') }}</span>
                                     </div>
                                 </div>
                                 
@@ -429,18 +494,20 @@
                             </div>
                         </div>
 
-                        <!-- Support Ad - ADD THIS CODE BELOW THE VERSION INFO CARD -->
+                        <!-- Support Section -->
                         <div class="card mt-4 fade-in">
-                            <div class="card-header">
-                                <i class="bi bi-heart-fill text-danger me-2"></i>Support This Project
+                            <div class="card-header bg-danger text-white">
+                                <i class="bi bi-heart-fill"></i>
+                                <span>Support This Project</span>
                             </div>
                             <div class="card-body">
-                                <div class="d-flex align-items-center justify-content-center mb-3">
+                                <div class="d-flex flex-column align-items-center justify-content-center mb-3">
                                     <div class="text-center">
-                                        <h4>YouTube Auto Uploader is completely free!</h4>
+                                        <i class="bi bi-cup-hot" style="font-size: 3rem; color: #FF5F5F;"></i>
+                                        <h4 class="mt-2">YouTube Auto Uploader is completely free!</h4>
                                         <p class="lead mb-4">If you find this tool useful, please consider supporting its development.</p>
                                         
-                                        <a href="https://ko-fi.com/harukidev" target="_blank" class="btn btn-primary btn-lg px-4 py-3 mb-3">
+                                        <a href="https://ko-fi.com/harukidev" target="_blank" class="btn btn-danger btn-lg px-4 py-3 mb-3">
                                             <i class="bi bi-cup-hot-fill me-2"></i>Support on Ko-Fi
                                         </a>
                                         
@@ -450,6 +517,19 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer with improved styling -->
+    <footer class="mt-5">
+        <div class="container">
+            <div class="text-center">
+                <p>YouTube Auto Uploader &copy; 2025 | <a href="https://github.com/oHaruki/YouTubeUploaderElectron" target="_blank">GitHub</a></p>
+            </div>
+        </div>
+    </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
