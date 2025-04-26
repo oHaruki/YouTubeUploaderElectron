@@ -12,7 +12,7 @@
 
 ## Overview
 
-YouTube Auto Uploader is a desktop application that automatically uploads gameplay videos to YouTube from a monitored folder. Perfect for content creators who want to streamline their workflow.
+YouTube Auto Uploader is a desktop application that automatically uploads gameplay videos to YouTube from a monitored folder.
 
 ## Key Features
 
