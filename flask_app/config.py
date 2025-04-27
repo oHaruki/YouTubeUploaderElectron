@@ -3,9 +3,21 @@ Configuration management for YouTube Auto Uploader
 """
 import os
 import json
+import logging
+
+# Configure logging
+logger = logging.getLogger('config')
 
 def get_config_path():
     """Get the absolute path to the config file"""
+    # Try USER_DATA_DIR from Electron first
+    user_data_dir = os.environ.get('USER_DATA_DIR')
+    if user_data_dir:
+        config_path = os.path.join(user_data_dir, 'config.json')
+        logger.info(f"Using config path from USER_DATA_DIR: {config_path}")
+        return config_path
+    
+    # Otherwise use standard paths
     if os.environ.get('ELECTRON_APP') == 'true':
         # In Electron, use the app data directory
         if os.name == 'nt':  # Windows
@@ -45,14 +57,39 @@ def load_config():
         "theme": "light"  # Default theme
     }
     
+    # Make sure the directory exists
+    try:
+        config_dir = os.path.dirname(CONFIG_FILE)
+        if config_dir and not os.path.exists(config_dir):
+            os.makedirs(config_dir, exist_ok=True)
+            logger.info(f"Created config directory: {config_dir}")
+    except Exception as e:
+        logger.error(f"Error creating config directory: {e}")
+    
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'r') as f:
-                return {**default_config, **json.load(f)}
+                config_data = json.load(f)
+                # Merge with defaults to ensure all keys exist
+                merged_config = {**default_config, **config_data}
+                return merged_config
         except Exception as e:
-            print(f"Error loading config: {e}")
+            logger.error(f"Error loading config from {CONFIG_FILE}: {e}")
+            # Try to save the default config
+            try:
+                save_config(default_config)
+            except:
+                pass
             return default_config
-    return default_config
+    else:
+        # Create the default config file if it doesn't exist
+        try:
+            save_config(default_config)
+            logger.info(f"Created default config file at {CONFIG_FILE}")
+        except Exception as e:
+            logger.error(f"Error creating default config file: {e}")
+        
+        return default_config
 
 def save_config(config):
     """
@@ -64,10 +101,29 @@ def save_config(config):
     # Ensure the directory exists
     directory = os.path.dirname(CONFIG_FILE)
     if directory and not os.path.exists(directory):
-        os.makedirs(directory, exist_ok=True)
+        try:
+            os.makedirs(directory, exist_ok=True)
+            logger.info(f"Created config directory: {directory}")
+        except Exception as e:
+            logger.error(f"Error creating config directory: {e}")
+            # Try to save to current directory as fallback
+            with open('config.json', 'w') as f:
+                json.dump(config, f, indent=2)
+            return
     
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(config, f)
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+        logger.info(f"Config saved to {CONFIG_FILE}")
+    except Exception as e:
+        logger.error(f"Error saving config to {CONFIG_FILE}: {e}")
+        # Try to save to current directory as fallback
+        try:
+            with open('config.json', 'w') as f:
+                json.dump(config, f, indent=2)
+            logger.info("Config saved to fallback location: config.json")
+        except Exception as e2:
+            logger.error(f"Error saving config to fallback location: {e2}")
 
 def update_config(settings):
     """

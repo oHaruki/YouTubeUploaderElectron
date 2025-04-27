@@ -111,6 +111,8 @@ const checkPythonPath = () => {
     'python'
   ];
 
+  log.info("Checking for Python installation...");
+  
   for (const cmd of pythonCommands) {
     try {
       const result = spawnSync(cmd, ['--version'], {
@@ -120,6 +122,24 @@ const checkPythonPath = () => {
       
       if (result.status === 0) {
         log.info(`Found Python command: ${cmd} (${result.stdout.trim()})`);
+        
+        // Check for required packages
+        try {
+          const packageCheck = spawnSync(cmd, ['-c', 'import flask, google, watchdog, googleapiclient; print("All required packages found")'], {
+            stdio: 'pipe',
+            encoding: 'utf8'
+          });
+          
+          if (packageCheck.status === 0) {
+            log.info("All required Python packages found");
+          } else {
+            log.warn(`Python found (${cmd}), but required packages are missing: ${packageCheck.stderr}`);
+            // Continue anyway, as the Flask app will show more detailed errors
+          }
+        } catch (pkgError) {
+          log.warn(`Error checking Python packages: ${pkgError.message}`);
+        }
+        
         return cmd;
       }
     } catch (error) {
@@ -127,6 +147,7 @@ const checkPythonPath = () => {
     }
   }
   
+  log.error("No Python installation found. Please install Python and try again.");
   return null;
 };
 
@@ -179,6 +200,23 @@ const startFlaskServer = async () => {
       return false;
     }
 
+    // Create directories if they don't exist
+    const appDataPath = app.getPath('userData');
+    const configPath = path.join(appDataPath, 'config');
+    const tokensPath = path.join(appDataPath, 'tokens');
+    const credPath = path.join(appDataPath, 'credentials');
+    
+    [configPath, tokensPath, credPath].forEach(dir => {
+      if (!fs.existsSync(dir)) {
+        try {
+          fs.mkdirSync(dir, { recursive: true });
+          log.info(`Created directory: ${dir}`);
+        } catch (e) {
+          log.error(`Failed to create directory ${dir}: ${e}`);
+        }
+      }
+    });
+
     // Ensure the Flask app script exists
     const scriptPath = path.join(app.isPackaged ? process.resourcesPath : app.getAppPath(), 'flask_app', 'app.py');
     if (!fs.existsSync(scriptPath)) {
@@ -189,20 +227,23 @@ const startFlaskServer = async () => {
     }
     log.info(`Using script path: ${scriptPath}`);
     
-    // Environment variables for Flask - THIS IS THE CRITICAL PART
+    // Environment variables for Flask
     const env = { 
       ...process.env, 
       PORT: flaskPort.toString(), 
-      ELECTRON_APP: 'true',  // This ensures the Flask app knows it's running in Electron
-      PYTHONUNBUFFERED: '1' // Ensure Python output is not buffered
+      ELECTRON_APP: 'true',
+      PYTHONUNBUFFERED: '1',
+      USER_DATA_DIR: appDataPath, // Add user data dir for token storage
+      FLASK_APP: scriptPath,
+      PYTHONDONTWRITEBYTECODE: '1' // Avoid creating __pycache__ folders
     };
     
     // Start Flask as a child process
     flaskProcess = spawn(pythonCommand, [scriptPath], { 
-      env,  // Pass the environment variables here
+      env,
       shell: true,
       stdio: 'pipe',
-      cwd: app.isPackaged ? process.resourcesPath : app.getAppPath() // Set working directory
+      cwd: app.isPackaged ? process.resourcesPath : app.getAppPath()
     });
     
     flaskProcess.stdout.on('data', (data) => {
