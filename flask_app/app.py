@@ -144,31 +144,73 @@ def create_version_json():
             logger.error(f"Error creating version.json: {e}")
 
 def run_app():
-    """Run the Flask application"""
+    """Run the Flask application with improved error handling"""
+    # Create version file if needed
+    create_version_json()
+    
+    # Create the app
+    app = create_app()
+    
+    # Start initialization in background to not block server startup
+    threading.Thread(target=init_app_background, daemon=True).start()
+    
+    # Get port from environment variable (for Electron integration)
+    port = int(os.environ.get('PORT', 5000))
+    
+    # Check if the port is already in use before attempting to bind
+    def is_port_in_use(port):
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex(('127.0.0.1', port)) == 0
+            
+    # If specified port is in use, try to find an available port
+    if is_port_in_use(port):
+        logger.warning(f"Port {port} is already in use, trying to find an available port")
+        # Try ports in range 5000-5010, then 8000-8010
+        for test_port in range(5000, 5010) + range(8000, 8010):
+            if not is_port_in_use(test_port):
+                logger.info(f"Found available port: {test_port}")
+                port = test_port
+                break
+    
     try:
-        # Ensure all required directories exist
-        ensure_app_directories()
+        # Set up signal handlers for graceful shutdown
+        def signal_handler(sig, frame):
+            logger.info(f"Received signal {sig}, shutting down...")
+            sys.exit(0)
+            
+        import signal
+        signal.signal(signal.SIGINT, signal_handler)
+        if hasattr(signal, 'SIGTERM'):
+            signal.signal(signal.SIGTERM, signal_handler)
         
-        # Create version file if needed
-        create_version_json()
+        # Log that we're starting the server
+        logger.info(f"Starting Flask server on http://127.0.0.1:{port}")
         
-        # Create the app
-        app = create_app()
-        
-        # Start initialization in background to not block server startup
-        threading.Thread(target=init_app_background, daemon=True).start()
-        
-        # Get port from environment variable (for Electron integration)
-        port = int(os.environ.get('PORT', 5000))
-        
-        logger.info(f"Starting Flask app on 127.0.0.1:{port}")
-        
-        # Run the Flask app - explicitly bind to IPv4 only
-        app.run(host='127.0.0.1', port=port, debug=False, threaded=True)
+        # Run the Flask app - explicitly bind to IPv4 only with improved parameters
+        app.run(
+            host='127.0.0.1', 
+            port=port, 
+            debug=False, 
+            threaded=True,
+            use_reloader=False  # Disable reloader to prevent duplicate processes
+        )
+    except OSError as e:
+        if "Address already in use" in str(e):
+            logger.error(f"Port {port} is already in use. Please close any other instances of this application or processes using this port.")
+            # If running in Electron, display an error dialog
+            if os.environ.get('ELECTRON_APP') == 'true':
+                # Create a simple error file that Electron can read
+                try:
+                    with open('flask_startup_error.txt', 'w') as f:
+                        f.write(f"Port {port} is already in use. Please close any other instances of this application.")
+                except:
+                    pass
+        else:
+            logger.error(f"Error starting Flask app: {e}")
+        sys.exit(1)
     except Exception as e:
-        logger.error(f"Error starting Flask app: {e}")
-        logger.error(traceback.format_exc())
-        # Exit with error code to notify the wrapper
+        logger.error(f"Unexpected error starting Flask app: {e}")
         sys.exit(1)
 
 if __name__ == '__main__':

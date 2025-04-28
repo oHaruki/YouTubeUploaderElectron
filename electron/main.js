@@ -111,8 +111,6 @@ const checkPythonPath = () => {
     'python'
   ];
 
-  log.info("Checking for Python installation...");
-  
   for (const cmd of pythonCommands) {
     try {
       const result = spawnSync(cmd, ['--version'], {
@@ -122,24 +120,6 @@ const checkPythonPath = () => {
       
       if (result.status === 0) {
         log.info(`Found Python command: ${cmd} (${result.stdout.trim()})`);
-        
-        // Check for required packages
-        try {
-          const packageCheck = spawnSync(cmd, ['-c', 'import flask, google, watchdog, googleapiclient; print("All required packages found")'], {
-            stdio: 'pipe',
-            encoding: 'utf8'
-          });
-          
-          if (packageCheck.status === 0) {
-            log.info("All required Python packages found");
-          } else {
-            log.warn(`Python found (${cmd}), but required packages are missing: ${packageCheck.stderr}`);
-            // Continue anyway, as the Flask app will show more detailed errors
-          }
-        } catch (pkgError) {
-          log.warn(`Error checking Python packages: ${pkgError.message}`);
-        }
-        
         return cmd;
       }
     } catch (error) {
@@ -147,8 +127,230 @@ const checkPythonPath = () => {
     }
   }
   
-  log.error("No Python installation found. Please install Python and try again.");
   return null;
+};
+
+// More robust waiting for Flask server
+const waitForFlaskServer = async (port, maxAttempts = 30, delayBetweenAttempts = 1000) => {
+  log.info(`Waiting for Flask server to start on port ${port}...`);
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      log.info(`Connection attempt ${attempt}/${maxAttempts} to Flask on port ${port}`);
+      
+      const connected = await new Promise(resolve => {
+        const req = http.get(`http://127.0.0.1:${port}/`, { timeout: 1000 }, (res) => {
+          log.info(`Connection successful! Status: ${res.statusCode}`);
+          req.destroy();
+          resolve(res.statusCode < 400);
+        });
+        
+        req.on('error', (err) => {
+          log.info(`Connection attempt ${attempt} failed: ${err.message}`);
+          resolve(false);
+        });
+        
+        req.on('timeout', () => {
+          log.info(`Connection attempt ${attempt} timed out`);
+          req.destroy();
+          resolve(false);
+        });
+      });
+      
+      if (connected) {
+        return true;
+      }
+    } catch (error) {
+      log.info(`Error in connection attempt ${attempt}: ${error}`);
+    }
+    
+    // Only delay if we're going to try again
+    if (attempt < maxAttempts) {
+      log.info(`Waiting ${delayBetweenAttempts}ms before next attempt...`);
+      await new Promise(resolve => setTimeout(resolve, delayBetweenAttempts));
+    }
+  }
+  
+  return false;
+};
+
+// Start Flask server with improved error handling and connection
+const startFlaskServer = async () => {
+  if (serverRunning) {
+    log.info('Flask server is already running');
+    return true;
+  }
+
+  try {
+    // Try to use a fixed port first, with fallbacks if needed
+    const preferredPorts = [5000, 5001, 8000, 8080, 8081];
+    let portFound = false;
+    
+    // Try each preferred port
+    for (const port of preferredPorts) {
+      if (BLOCKED_PORTS.includes(port)) {
+        log.info(`Port ${port} is in blocked list, skipping`);
+        continue;
+      }
+      
+      try {
+        // Check if port is available
+        const isAvailable = await new Promise(resolve => {
+          const server = require('net').createServer();
+          server.once('error', () => {
+            resolve(false);
+          });
+          server.once('listening', () => {
+            server.close();
+            resolve(true);
+          });
+          server.listen(port);
+        });
+        
+        if (isAvailable) {
+          flaskPort = port;
+          portFound = true;
+          log.info(`Found available port: ${flaskPort}`);
+          break;
+        } else {
+          log.info(`Port ${port} is not available, trying next port`);
+        }
+      } catch (error) {
+        log.info(`Error checking port ${port}: ${error.message}`);
+      }
+    }
+    
+    // If no preferred port works, use portfinder as a last resort
+    if (!portFound) {
+      log.info(`No preferred ports available, using portfinder`);
+      flaskPort = await portfinder.getPortPromise({
+        port: 8000,
+        stopPort: 9000,
+        filter: (port) => !BLOCKED_PORTS.includes(port)
+      });
+    }
+    
+    store.set('port', flaskPort);
+    log.info(`Starting Flask server on port ${flaskPort}...`);
+
+    // Check for Python executable
+    const pythonCommand = checkPythonPath();
+    if (!pythonCommand) {
+      const errorMessage = 'Python is required but was not found on your system. Please install Python and try again.';
+      log.error(errorMessage);
+      dialog.showErrorBox('Python Not Found', errorMessage);
+      return false;
+    }
+
+    // Ensure the Flask app script exists
+    const scriptPath = path.join(app.isPackaged ? process.resourcesPath : app.getAppPath(), 'flask_app', 'app.py');
+    if (!fs.existsSync(scriptPath)) {
+      const errorMessage = `Flask app script not found at ${scriptPath}`;
+      log.error(errorMessage);
+      dialog.showErrorBox('Flask App Not Found', errorMessage);
+      return false;
+    }
+    log.info(`Using script path: ${scriptPath}`);
+    
+    // Environment variables for Flask
+    const env = { 
+      ...process.env, 
+      PORT: flaskPort.toString(), 
+      ELECTRON_APP: 'true',
+      PYTHONUNBUFFERED: '1',
+      FLASK_DEBUG: '0'  // Explicitly disable Flask debug mode
+    };
+    
+    // Start Flask as a child process with better error handling
+    log.info(`Spawning Flask process with command: ${pythonCommand} ${scriptPath}`);
+    log.info(`Working directory: ${app.isPackaged ? process.resourcesPath : app.getAppPath()}`);
+    log.info(`Environment PORT: ${env.PORT}`);
+    
+    flaskProcess = spawn(pythonCommand, [scriptPath], { 
+      env,
+      shell: true,
+      stdio: 'pipe',
+      cwd: app.isPackaged ? process.resourcesPath : app.getAppPath()
+    });
+    
+    // Add event listeners for process output and errors
+    flaskProcess.stdout.on('data', (data) => {
+      const output = data.toString();
+      log.info(`Flask stdout: ${output}`);
+      
+      // Look for successful startup message
+      if (output.includes('Running on http://')) {
+        const port = extractPortFromOutput(output);
+        if (port) {
+          log.info(`Detected Flask running on port ${port} from stdout`);
+          flaskPort = port;
+        }
+      }
+    });
+    
+    flaskProcess.stderr.on('data', (data) => {
+      const output = data.toString();
+      log.error(`Flask stderr: ${output}`);
+      
+      // Still check stderr for port info as some Flask info goes to stderr
+      if (output.includes('Running on http://')) {
+        const port = extractPortFromOutput(output);
+        if (port) {
+          log.info(`Detected Flask running on port ${port} from stderr`);
+          flaskPort = port;
+        }
+      }
+    });
+    
+    flaskProcess.on('error', (err) => {
+      log.error(`Failed to start Flask process: ${err}`);
+      dialog.showErrorBox('Flask Error', `Failed to start Flask: ${err.message}`);
+      return false;
+    });
+    
+    flaskProcess.on('close', (code) => {
+      log.info(`Flask server process exited with code ${code}`);
+      serverRunning = false;
+      
+      if (!quitting && code !== 0) {
+        log.info('Flask server crashed, restarting...');
+        setTimeout(startFlaskServer, 2000);  // Increased delay before restart
+      }
+    });
+
+    // Wait for Flask server to be available
+    log.info(`Waiting for Flask server to become available...`);
+    const isServerRunning = await waitForFlaskServer(flaskPort);
+    
+    if (isServerRunning) {
+      serverRunning = true;
+      log.info(`✓ Successfully connected to Flask on port ${flaskPort}`);
+      
+      if (!mainWindow) {
+        createWindow();
+      } else {
+        mainWindow.loadURL(`http://127.0.0.1:${flaskPort}`);
+      }
+      return true;
+    } else {
+      // Still not running after all attempts - show a more helpful error message
+      log.error(`Failed to connect to Flask server after multiple attempts`);
+      
+      const errorMessage = 
+        'Could not connect to the Flask server. This could be due to:\n\n' +
+        '1. Python or required packages not properly installed\n' +
+        '2. Port conflicts\n' +
+        '3. Firewall blocking the connection\n\n' +
+        'Please check the logs for more details.';
+      
+      dialog.showErrorBox('Server Connection Error', errorMessage);
+      return false;
+    }
+  } catch (error) {
+    log.error('Failed to start Flask server:', error);
+    dialog.showErrorBox('Server Error', `Failed to start the Flask server: ${error.message}`);
+    return false;
+  }
 };
 
 // Try to connect to a server on the given port
@@ -172,195 +374,6 @@ const tryConnect = async (port) => {
       resolve(false);
     });
   });
-};
-
-const startFlaskServer = async () => {
-  if (serverRunning) {
-    log.info('Flask server is already running');
-    return true;
-  }
-
-  try {
-    // Find an available port that's not in the blocked list
-    flaskPort = await portfinder.getPortPromise({
-      port: 8000, // Start at 8000 to avoid most blocked ports
-      stopPort: 9000,
-      filter: (port) => !BLOCKED_PORTS.includes(port)
-    });
-    
-    store.set('port', flaskPort);
-    log.info(`Starting Flask server on port ${flaskPort}...`);
-
-    // Check for Python executable
-    const pythonCommand = checkPythonPath();
-    if (!pythonCommand) {
-      const errorMessage = 'Python is required but was not found on your system. Please install Python and try again.';
-      log.error(errorMessage);
-      dialog.showErrorBox('Python Not Found', errorMessage);
-      return false;
-    }
-
-    // Create directories if they don't exist
-    const appDataPath = app.getPath('userData');
-    const configPath = path.join(appDataPath, 'config');
-    const tokensPath = path.join(appDataPath, 'tokens');
-    const credPath = path.join(appDataPath, 'credentials');
-    
-    [configPath, tokensPath, credPath].forEach(dir => {
-      if (!fs.existsSync(dir)) {
-        try {
-          fs.mkdirSync(dir, { recursive: true });
-          log.info(`Created directory: ${dir}`);
-        } catch (e) {
-          log.error(`Failed to create directory ${dir}: ${e}`);
-        }
-      }
-    });
-
-    // Ensure the Flask app script exists
-    const scriptPath = path.join(app.isPackaged ? process.resourcesPath : app.getAppPath(), 'flask_app', 'app.py');
-    if (!fs.existsSync(scriptPath)) {
-      const errorMessage = `Flask app script not found at ${scriptPath}`;
-      log.error(errorMessage);
-      dialog.showErrorBox('Flask App Not Found', errorMessage);
-      return false;
-    }
-    log.info(`Using script path: ${scriptPath}`);
-    
-    // Environment variables for Flask
-    const env = { 
-      ...process.env, 
-      PORT: flaskPort.toString(), 
-      ELECTRON_APP: 'true',
-      PYTHONUNBUFFERED: '1',
-      USER_DATA_DIR: appDataPath, // Add user data dir for token storage
-      FLASK_APP: scriptPath,
-      PYTHONDONTWRITEBYTECODE: '1' // Avoid creating __pycache__ folders
-    };
-    
-    // Start Flask as a child process
-    flaskProcess = spawn(pythonCommand, [scriptPath], { 
-      env,
-      shell: true,
-      stdio: 'pipe',
-      cwd: app.isPackaged ? process.resourcesPath : app.getAppPath()
-    });
-    
-    flaskProcess.stdout.on('data', (data) => {
-      const output = data.toString();
-      log.info(`Flask stdout: ${output}`);
-      
-      const port = extractPortFromOutput(output);
-      if (port) {
-        log.info(`Detected Flask running on port ${port} from stdout`);
-        flaskPort = port;
-        tryConnect(flaskPort).then(result => {
-          if (result) {
-            serverRunning = true;
-            log.info(`Successfully connected to Flask on port ${flaskPort}`);
-            if (!mainWindow) {
-              createWindow();
-            } else {
-              mainWindow.loadURL(`http://127.0.0.1:${flaskPort}`);
-            }
-          }
-        });
-      }
-    });
-    
-    flaskProcess.stderr.on('data', (data) => {
-      const output = data.toString();
-      log.error(`Flask stderr: ${output}`);
-      
-      const port = extractPortFromOutput(output);
-      if (port) {
-        log.info(`Detected Flask running on port ${port} from stderr`);
-        flaskPort = port;
-        tryConnect(flaskPort).then(result => {
-          if (result) {
-            serverRunning = true;
-            log.info(`Successfully connected to Flask on port ${flaskPort}`);
-            if (!mainWindow) {
-              createWindow();
-            } else {
-              mainWindow.loadURL(`http://127.0.0.1:${flaskPort}`);
-            }
-          }
-        });
-      }
-    });
-    
-    flaskProcess.on('error', (err) => {
-      log.error(`Failed to start Flask process: ${err}`);
-      dialog.showErrorBox('Flask Error', `Failed to start Flask: ${err.message}`);
-      return false;
-    });
-    
-    flaskProcess.on('close', (code) => {
-      log.info(`Flask server process exited with code ${code}`);
-      serverRunning = false;
-      
-      if (!quitting && code !== 0) {
-        log.info('Flask server crashed, restarting...');
-        setTimeout(startFlaskServer, 1000);
-      }
-    });
-
-    // Check if Flask server starts successfully
-    const maxWaitTime = 30000;
-    const startTime = Date.now();
-    
-    // Try to connect to the server with multiple attempts
-    let attempts = 0;
-    const portsToTry = [flaskPort, 8080, 8081, 8082, 8083, 8084, 8085];
-    
-    while (Date.now() - startTime < maxWaitTime) {
-      attempts++;
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Try the expected port first
-      log.info(`Connection attempt ${attempts} to Flask on port ${flaskPort}...`);
-      if (await tryConnect(flaskPort)) {
-        serverRunning = true;
-        log.info(`✓ Successfully connected to Flask on port ${flaskPort}`);
-        
-        if (!mainWindow) {
-          createWindow();
-        } else {
-          mainWindow.loadURL(`http://127.0.0.1:${flaskPort}`);
-        }
-        return true;
-      }
-      
-      // Try other possible ports
-      for (const altPort of portsToTry) {
-        if (altPort !== flaskPort) {
-          log.info(`Trying alternative port ${altPort}...`);
-          if (await tryConnect(altPort)) {
-            flaskPort = altPort;
-            serverRunning = true;
-            log.info(`✓ Found Flask server on alternative port ${altPort}`);
-            
-            if (!mainWindow) {
-              createWindow();
-            } else {
-              mainWindow.loadURL(`http://127.0.0.1:${flaskPort}`);
-            }
-            return true;
-          }
-        }
-      }
-    }
-    
-    const errorMessage = 'Flask server might be running but not responding. Check for errors in the server logs.';
-    log.error(errorMessage);
-    dialog.showErrorBox('Server Error', errorMessage);
-    return false;
-  } catch (error) {
-    log.error('Failed to start Flask server:', error);
-    dialog.showErrorBox('Server Error', `Failed to start the Flask server: ${error.message}`);
-    return false;
-  }
 };
 
 // Shut down Flask server
