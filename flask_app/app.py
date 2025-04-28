@@ -9,6 +9,8 @@ import threading
 import logging
 import time
 import traceback
+import argparse
+import json
 
 # Enable insecure transport for local development
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
@@ -142,6 +144,7 @@ def create_version_json():
             logger.info(f"Created version.json file with version {current_version}")
         except Exception as e:
             logger.error(f"Error creating version.json: {e}")
+            
 
 def run_app():
     """Run the Flask application with improved error handling"""

@@ -676,3 +676,78 @@ function initializeAppDirectories() {
   
   return { dirs, pathsFile };
 }
+
+
+// Function to find the bundled Python executable
+const findBundledPython = () => {
+  // For packaged app, look in the resources directory
+  if (app.isPackaged) {
+    const pythonExePath = path.join(
+      process.resourcesPath,
+      'python',
+      process.platform === 'win32' ? 'python.exe' : 'bin/python3'
+    );
+    
+    if (fs.existsSync(pythonExePath)) {
+      log.info(`Found bundled Python at: ${pythonExePath}`);
+      return pythonExePath;
+    }
+    
+    // Also check resources/app.asar.unpacked/python if it exists
+    const unpackedPythonPath = path.join(
+      process.resourcesPath,
+      'app.asar.unpacked',
+      'python',
+      process.platform === 'win32' ? 'python.exe' : 'bin/python3'
+    );
+    
+    if (fs.existsSync(unpackedPythonPath)) {
+      log.info(`Found bundled Python in unpacked resources: ${unpackedPythonPath}`);
+      return unpackedPythonPath;
+    }
+  }
+  
+  return null;
+};
+
+// Function to create a file-based ready signal
+const setupFileBasedReadySignal = () => {
+  const signalPath = path.join(app.getPath('temp'), 'youtube-uploader-ready.txt');
+  
+  // Delete any existing signal file
+  if (fs.existsSync(signalPath)) {
+    try {
+      fs.unlinkSync(signalPath);
+      log.info(`Deleted existing ready signal at ${signalPath}`);
+    } catch (err) {
+      log.error(`Failed to delete existing ready signal: ${err}`);
+    }
+  }
+  
+  return signalPath;
+};
+
+// Function to wait for the file-based ready signal
+const waitForFileReadySignal = async (signalPath, maxWaitTime = 30000) => {
+  const startTime = Date.now();
+  log.info(`Waiting for ready signal file at ${signalPath}`);
+  
+  while (Date.now() - startTime < maxWaitTime) {
+    if (fs.existsSync(signalPath)) {
+      try {
+        const content = fs.readFileSync(signalPath, 'utf8');
+        const data = JSON.parse(content);
+        log.info(`Ready signal found with data: ${JSON.stringify(data)}`);
+        return data;
+      } catch (err) {
+        log.error(`Error reading ready signal: ${err}`);
+      }
+    }
+    
+    // Wait a short time before checking again
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  
+  log.error(`Timed out waiting for ready signal after ${maxWaitTime}ms`);
+  return null;
+};
